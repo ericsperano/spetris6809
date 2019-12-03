@@ -3,20 +3,37 @@
 *******************************************************************************
                 ORG     $3F00
 Start           JSR     SaveVideoRAM            ; save video ram to restore on exit
-                *JSR     ClearScreen
                 JSR     DrawInfo
-                JSR     DrawNextPiece
                 JSR     DrawField
-GetKey          JSR     [POLCAT]                ; Polls keyboard 
-                BEQ     GetKey                  ; Loop back if nothing
+                LDA     #0
+                JSR     DrawNextPiece
+GetKey0         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey0                 ; Loop back if nothing
+                LDA     #1
+                JSR     DrawNextPiece
+GetKey1         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey1                 ; Loop back if nothing
+                LDA     #2
+                JSR     DrawNextPiece
+GetKey2         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey2                 ; Loop back if nothing
+                LDA     #3
+                JSR     DrawNextPiece
+GetKey3         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey3                 ; Loop back if nothing
+                LDA     #4
+                JSR     DrawNextPiece
+GetKey4         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey4                 ; Loop back if nothing
+                LDA     #5
+                JSR     DrawNextPiece
+GetKey5         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey5                 ; Loop back if nothing
+                LDA     #6
+                JSR     DrawNextPiece
+GetKey6         JSR     [POLCAT]                ; Polls keyboard 
+                BEQ     GetKey6                 ; Loop back if nothing
                 JSR     RestoreVideoRAM         ; Cleanup and end execution
-                RTS
-*******************************************************************************
-ClearScreen     LDY     #VideoRAM               ; Y points to the real video ram
-                LDA     #ChSpc
-csLoop1         STA     ,Y+                     ; Put A in video ram
-                CMPY    #$600                   ; End of video ram?
-                BNE     csLoop1                 ; Loop if more to display
                 RTS
 *******************************************************************************               
 DrawField       LDY     #VideoRAM               ; Y points to the real video ram
@@ -60,11 +77,14 @@ DrawPiece       PSHS    D
                 ADDD    #VideoRAM
                 ADDD    drawPieceX
                 TFR     D,Y                     ; our video ram index  
-                *PULU    A                       ; calculate the offset from Pieces
-                *LDB     #PiecesLength
-                *MUL
-                *ADDD    Pieces 
-                LDX     #Pieces 
+                PULU    A                       ; calculate the offset from Pieces
+                LDB     #PiecesLength
+                MUL
+                ADDD    #Pieces 
+                TFR     D,X
+                LDA     ,X+ 
+                STA     drawPieceBlock
+                *LDX     #Pieces 
 dpLoop1         LDB     #4
 dpLoop2         LDA     ,X+
                 CMPA    #Dot
@@ -84,28 +104,21 @@ endDrawPiece    PULS    Y
                 RTS
 
 *******************************************************************************
-DrawNextPiece   *LDX     #Pieces                 ; Piece to draw
-                *LDA     #(FieldWidth+2)         ; X Position
-                *LDB     #5                      ; Y Position
-                LDA     #0 ;#Pieces                 ; Piece to draw 1st param
+DrawNextPiece   STA     pieceToDraw
+                LDA     #7                      ; clear first
+                PSHU    A                       ; Piece index to draw 3rd param
+                LDA     #5                      ; Y Position 2nd param
                 PSHU    A
-                LDA     #5                      ; Y Position 3rd param
-                PSHU    A
-                LDD     #(FieldWidth+2)         ; X Position 2nd param
+                LDD     #(FieldWidth+2)         ; X Position 1st param
                 PSHU    D
                 JSR     DrawPiece
-*                LDY     #(VideoRAM+(32*5)+FieldWidth+2)
-*                
-*dnLoop1         LDB     #4
-*dnLoop2         LDA     ,X+
-*                STA     ,Y+
-*                DECB
-*                BNE     dnLoop2
-*                TFR     Y,D
-*                ADDD    #28                
-*                TFR     D,Y
-*                CMPY    #(VideoRAM+(32*10)+FieldWidth+2)
-*                BNE     dnLoop1
+                LDA     pieceToDraw
+drawNextPiece0  PSHU    A                       ; Piece index to draw 3rd param
+                LDA     #5                      ; Y Position 2nd param
+                PSHU    A
+                LDD     #(FieldWidth+2)         ; X Position 1st param
+                PSHU    D
+                JSR     DrawPiece
                 RTS
 *******************************************************************************
 SaveVideoRAM    LDY     #VideoRAM       ; Y points to the real video ram
@@ -141,15 +154,25 @@ KeyDown		    EQU	$0A		                    ; DOWN key
 *******************************************************************************
 *******************************************************************************
 drawPieceX      FDB     0
-drawPieceBlock  FCB     128 ;65
-PiecesLength    EQU     16
-Pieces          FCC     /..X...X...X...X./
+drawPieceBlock  FCB     0
+pieceToDraw     FCB     0
+PiecesLength    EQU     1+16               
+Pieces          FCB     128+15+(16*7)  
+                FCC     /..X...X...X...X./
+                FCB     128+15+16
                 FCC     /..X..XX...X...../
+                FCB     128+15+(16*2)  
                 FCC     /.....XX..XX...../
+                FCB     128+15+(16*3)
                 FCC     /..X..XX..X....../
+                FCB     128+15+(16*4)
                 FCC     /.X...XX...X...../
+                FCB     128+15+(16*5)
                 FCC     /.X...X...XX...../
+                FCB     128+15+(16*6)
                 FCC     /..X...X..XX...../
+                FCB     128+15
+                FCC     /XXXXXXXXXXXXXXXX/
 Field           FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
                 FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
                 FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
@@ -179,18 +202,12 @@ Info            FCC     /````````````````````/
                 FCC     /````````````````````/
                 FCC     /````````````````````/
                 FCC     /````````````````````/
+                FCC     /````````````````````/
+                FCC     /````````````````````/
+                FCC     /````````````````````/
                 FCC     /``/
                 FCB     $5E
                 FCC     /z`ROTATE`````````/
-                FCC     /``/
-                FCB     $5F
-                FCC     /z`DOWN```````````/
-                FCC     /``/
-                FCB     $5F
-                FCC     /z`LEFT```````````/
-                FCC     /``/
-                FCB     $5F
-                FCC     /z`RIGHT``````````/
                 FCC     /````````````````````/
 VideoRAMBuffer  FCC     /                                /
                 FCC     /                                /
