@@ -64,7 +64,11 @@ diLoop2         LDA     ,X+                     ; Load in A the byte to display
                 BNE     diLoop1                 ; Loop if more to display
                 RTS
 *******************************************************************************
-* DrawPiece: A=x B=y X=piece addr
+* DrawPiece: 
+* U: x          B
+* U: y          W
+* U: pieceIdx   B
+* U: rotation   B
 *******************************************************************************
 DrawPiece       PSHS    D
                 PSHS    X
@@ -78,13 +82,18 @@ DrawPiece       PSHS    D
                 ADDD    drawPieceX
                 TFR     D,Y                     ; our video ram index  
                 PULU    A                       ; calculate the offset from Pieces
-                LDB     #PiecesLength
+                LDB     #TotalPieceLen          
                 MUL
                 ADDD    #Pieces 
-                TFR     D,X
-                LDA     ,X+ 
-                STA     drawPieceBlock
-                *LDX     #Pieces 
+                TFR     D,X                     ; X is at the beginning of the piece struct
+                LDA     ,X+                     ; copy the block used to draw the piece and increment X
+                STA     drawPieceBlock          ; store the block
+                PULU    B                       ; get rotation 
+dpLoop0         CMPB    #0                      ; will increment X until we are positionned to the good rotated piece
+                BEQ     dpLoop1 
+                LEAX    PieceLen,X 
+                DECB
+                JMP     dpLoop0
 dpLoop1         LDB     #4
 dpLoop2         LDA     ,X+
                 CMPA    #Dot
@@ -104,14 +113,18 @@ endDrawPiece    PULS    Y
                 RTS
 
 *******************************************************************************
-DrawNextPiece   STA     pieceToDraw
-                LDA     #7                      ; clear first
-                PSHU    A                       ; Piece index to draw 3rd param
-                LDA     #5                      ; Y Position 2nd param
+DrawNextPiece   STA     pieceToDraw ;; TODO use stack
+                LDA     #0                      ; rotation: 4th param, always 0 when we clear
                 PSHU    A
-                LDD     #(FieldWidth+2)         ; X Position 1st param
+                LDA     #7                      ; we first erase by printing the last one
+                PSHU    A
+                LDA     #5                      ; Y Position: 2nd param
+                PSHU    A
+                LDD     #(FieldWidth+2)         ; X Position: 1st param
                 PSHU    D
                 JSR     DrawPiece
+                LDA     #3                      ; rotation: 4th param
+                PSHU    A
                 LDA     pieceToDraw
 drawNextPiece0  PSHU    A                       ; Piece index to draw 3rd param
                 LDA     #5                      ; Y Position 2nd param
@@ -156,22 +169,44 @@ KeyDown		    EQU	$0A		                    ; DOWN key
 drawPieceX      FDB     0
 drawPieceBlock  FCB     0
 pieceToDraw     FCB     0
-PiecesLength    EQU     1+16               
-Pieces          FCB     128+15+(16*7)  
-                FCC     /..X...X...X...X./
-                FCB     128+15+16
-                FCC     /..X..XX...X...../
-                FCB     128+15+(16*2)  
-                FCC     /.....XX..XX...../
-                FCB     128+15+(16*3)
-                FCC     /..X..XX..X....../
-                FCB     128+15+(16*4)
-                FCC     /.X...XX...X...../
-                FCB     128+15+(16*5)
-                FCC     /.X...X...XX...../
-                FCB     128+15+(16*6)
-                FCC     /..X...X..XX...../
-                FCB     128+15
+PieceLen        EQU     16
+TotalPieceLen   EQU     1+(4*PieceLen)
+Pieces          FCB     128+15+(16*7)           ; piece 1
+                FCC     /..X...X...X...X./      ; rotation 0
+                FCC     /........XXXX..../      ; rotation 1
+                FCC     /.X...X...X...X../      ; rotation 2
+                FCC     /....XXXX......../      ; rotation 3
+                FCB     128+15+16               ; piece 2
+                FCC     /..X..XX...X...../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15+(16*2)           ; piece 3
+                FCC     /.....XX..XX...../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15+(16*3)           ; piece 4
+                FCC     /..X..XX..X....../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15+(16*4)           ; piece 5
+                FCC     /.X...XX...X...../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15+(16*5)           ; piece 6
+                FCC     /.X...X...XX...../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15+(16*6)           ; piece 7
+                FCC     /..X...X..XX...../      ; rotation 0
+                FCC     /................/      ; rotation 1
+                FCC     /................/      ; rotation 2
+                FCC     /................/      ; rotation 3
+                FCB     128+15                  ; clear
                 FCC     /XXXXXXXXXXXXXXXX/
 Field           FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
                 FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
