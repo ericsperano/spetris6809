@@ -7,6 +7,7 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
                 JSR     DrawField
                 LDA     #0
                 JSR     DrawNextPiece
+
 GetKey0         JSR     [POLCAT]                ; Polls keyboard 
                 BEQ     GetKey0                 ; Loop back if nothing
                 LDA     #1
@@ -35,6 +36,33 @@ GetKey6         JSR     [POLCAT]                ; Polls keyboard
                 BEQ     GetKey6                 ; Loop back if nothing
                 JSR     RestoreVideoRAM         ; Cleanup and end execution
                 RTS
+
+
+*******************************************************************************               
+DrawMyPiece     CLRA                            
+                PSHS    A     
+                PSHS    B
+                PSHU    B                       ; Rotation: 4th param, always 0 when we clear
+                LDA     #ClearPiece             ; Piece # to draw: 3rd param
+                PSHU    A
+                LDA     #8                      ; Y Position: 2nd param
+                PSHU    A
+                LDD     #6                      ; X Position: 1st param
+                PSHU    D
+                JSR     DrawPiece               ; Call subroutine
+                                                ; Now we draw the piece
+                PULS    A                       ; Rotation still 0: 4th param, from the stack (see a top of subroutine)
+                PSHU    A
+                PULS    A                       ; Piece # to draw 3rd param, from the stack (see a top of subroutine)
+                PSHU    A                       
+                LDA     #8                      ; Y Position: 2nd param
+                PSHU    A
+                LDD     #6                      ; X Position: 1st param
+                PSHU    D
+                JSR     DrawPiece               ; Call subroutine
+                RTS
+
+
 *******************************************************************************               
 DrawField       LDY     #VideoRAM               ; Y points to the real video ram
                 LDX     #Field                  ; X points to the intro text
@@ -65,8 +93,8 @@ diLoop2         LDA     ,X+                     ; Load in A the byte to display
                 RTS
 *******************************************************************************
 * DrawPiece: 
-* U: x          B
-* U: y          W
+* U: x          W
+* U: y          B
 * U: pieceIdx   B
 * U: rotation   B
 *******************************************************************************
@@ -111,27 +139,32 @@ endDrawPiece    PULS    Y
                 PULS    X 
                 PULS    D                
                 RTS
-
 *******************************************************************************
-DrawNextPiece   STA     pieceToDraw ;; TODO use stack
-                LDA     #0                      ; rotation: 4th param, always 0 when we clear
+* DrawNextPiece: 
+* A: pieceIdx
+*******************************************************************************
+DrawNextPiece   PSHS    A                       ; restored on exit
+                PSHS    A                       ; and put in a second time because we need it later
+                CLRA                            ; Rotation: 4th param, always 0 when we clear
                 PSHU    A
-                LDA     #7                      ; we first erase by printing the last one
+                LDA     #ClearPiece             ; Piece # to draw: 3rd param
                 PSHU    A
                 LDA     #5                      ; Y Position: 2nd param
                 PSHU    A
                 LDD     #(FieldWidth+2)         ; X Position: 1st param
                 PSHU    D
-                JSR     DrawPiece
-                LDA     #3                      ; rotation: 4th param
+                JSR     DrawPiece               ; Call subroutine
+                                                ; Now we draw the piece
+                CLRA                            ; Rotation still 0: 4th param
                 PSHU    A
-                LDA     pieceToDraw
-drawNextPiece0  PSHU    A                       ; Piece index to draw 3rd param
-                LDA     #5                      ; Y Position 2nd param
+                PULS    A                       ; Piece # to draw 3rd param, from the stack (see a top of subroutine)
+                PSHU    A                       
+                LDA     #5                      ; Y Position: 2nd param
                 PSHU    A
-                LDD     #(FieldWidth+2)         ; X Position 1st param
+                LDD     #(FieldWidth+2)         ; X Position: 1st param
                 PSHU    D
-                JSR     DrawPiece
+                JSR     DrawPiece               ; Call subroutine
+                PULS    A
                 RTS
 *******************************************************************************
 SaveVideoRAM    LDY     #VideoRAM       ; Y points to the real video ram
@@ -168,46 +201,46 @@ KeyDown		    EQU	$0A		                    ; DOWN key
 *******************************************************************************
 drawPieceX      FDB     0
 drawPieceBlock  FCB     0
-pieceToDraw     FCB     0
 PieceLen        EQU     16
 TotalPieceLen   EQU     1+(4*PieceLen)
-Pieces          FCB     128+15+(16*7)           ; piece 1
+Pieces          FCB     128+15+(16*7)           ; color piece 1
                 FCC     /..X...X...X...X./      ; rotation 0
                 FCC     /........XXXX..../      ; rotation 1
                 FCC     /.X...X...X...X../      ; rotation 2
                 FCC     /....XXXX......../      ; rotation 3
-                FCB     128+15+16               ; piece 2
+                FCB     128+15+16               ; color piece 2
                 FCC     /..X..XX...X...../      ; rotation 0
                 FCC     /................/      ; rotation 1
                 FCC     /................/      ; rotation 2
                 FCC     /................/      ; rotation 3
-                FCB     128+15+(16*2)           ; piece 3
+                FCB     128+15+(16*2)           ; color piece 3
                 FCC     /.....XX..XX...../      ; rotation 0
-                FCC     /................/      ; rotation 1
-                FCC     /................/      ; rotation 2
-                FCC     /................/      ; rotation 3
-                FCB     128+15+(16*3)           ; piece 4
+                FCC     /.....XX..XX...../      ; rotation 0
+                FCC     /.....XX..XX...../      ; rotation 0
+                FCC     /.....XX..XX...../      ; rotation 0
+                FCB     128+15+(16*3)           ; Color piece 4
                 FCC     /..X..XX..X....../      ; rotation 0
                 FCC     /................/      ; rotation 1
                 FCC     /................/      ; rotation 2
                 FCC     /................/      ; rotation 3
-                FCB     128+15+(16*4)           ; piece 5
+                FCB     128+15+(16*4)           ; Color piece 5
                 FCC     /.X...XX...X...../      ; rotation 0
                 FCC     /................/      ; rotation 1
                 FCC     /................/      ; rotation 2
                 FCC     /................/      ; rotation 3
-                FCB     128+15+(16*5)           ; piece 6
+                FCB     128+15+(16*5)           ; Color piece 6
                 FCC     /.X...X...XX...../      ; rotation 0
                 FCC     /................/      ; rotation 1
                 FCC     /................/      ; rotation 2
                 FCC     /................/      ; rotation 3
-                FCB     128+15+(16*6)           ; piece 7
+                FCB     128+15+(16*6)           ; Color piece 7
                 FCC     /..X...X..XX...../      ; rotation 0
                 FCC     /................/      ; rotation 1
                 FCC     /................/      ; rotation 2
                 FCC     /................/      ; rotation 3
                 FCB     128+15                  ; clear
                 FCC     /XXXXXXXXXXXXXXXX/
+ClearPiece      EQU     7
 Field           FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
                 FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
                 FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
