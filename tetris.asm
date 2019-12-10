@@ -12,24 +12,24 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
 MainLoop        JSR     [POLCAT]                ; Polls keyboard
                 BEQ     main2
                 LDA     CurrentRotation
-                INCA 
+                INCA
                 CMPA    #4
                 BNE     saveRotation
                 CLRA
-saveRotation    STA     CurrentRotation                
+saveRotation    STA     CurrentRotation
 main2           NOP
-                JSR     Sleep   
+                JSR     Sleep
 drawField       JSR     DrawField
-                CLRA    
+                CLRA
                 LDB     CurrentX
-                TFR     D,X 
+                TFR     D,X
                 LDB     CurrentY
                 CMPB    #13
                 BEQ     EndGame
-                TFR     D,Y  
-                LDA     #1                      ; piece to draw 
+                TFR     D,Y
+                LDA     #1                      ; piece to draw
                 LDB     CurrentRotation
-                JSR     DrawPiece 
+                JSR     DrawPiece
 
                 INC     CurrentY
                 JMP     MainLoop
@@ -77,43 +77,43 @@ EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
 Sleep           PSHU    X,CC
                 LDX     #-1
 sleepLoop       LEAX    -1,X
-                BNE     sleepLoop 
+                BNE     sleepLoop
                 PULU    X,CC
                 RTS
 *******************************************************************************
-InitGame        PSHU    A,B,CC 
+InitGame        PSHU    A,B,CC
                 LDD     $112                    ; timer value
                 STD     Seed
                 CLR     Score
                 PULU    A,B,CC
                 RTS
 *******************************************************************************
-NewPiece        PSHU    A,B,CC 
+NewPiece        PSHU    A,B,CC
                 LDA     #(FieldWidth/2)-2
                 STA     CurrentX
-                CLR     CurrentY                
-                JSR     Random                  ; Random number in D 
+                CLR     CurrentY
+                JSR     Random                  ; Random number in D
                 CLRA                            ; clear a, otherwise not always work, because negative number?? TODO
                 STD     Dividend
                 LDA     #7                      ; 7 different pieces
-                STA     Divisor 
+                STA     Divisor
                 ; do division
                 LDA     #8
                 STA     Remainder
                 LDD     Dividend
 npDivide        ASLB
                 ROLA
-                CMPA    Divisor 
+                CMPA    Divisor
                 BCS     npCheckCount
                 SUBA    Divisor
                 INCB
 npCheckCount    DEC     Remainder
-                BNE     npDivide   
+                BNE     npDivide
                 ;STA     Remainder
                 ;STB     Quotient
-                STA     NextPiece                             
+                STA     NextPiece
                 PULU    A,B,CC
-                RTS      
+                RTS
 *******************************************************************************
 * From 6809 Machine Code Programming (David Barrow).pdf p.34
 Random          PSHS    D
@@ -133,9 +133,9 @@ Random          PSHS    D
                 STD     1,S                     ;6, (S+I) = 3 *3 * 3R
                 PULS    A                       ;6,
                 LDB     #41                     ;2, D = 2 • 256 • 3 R + 41
-                SUBD    ,S++ 
+                SUBD    ,S++
                 STD     Seed
-                RTS                             ;5, exit, D = new R. 
+                RTS                             ;5, exit, D = new R.
 *******************************************************************************
 DrawField       PSHU    A,B,X,Y,CC
                 LDY     #VideoRAM               ; Y points to the real video ram
@@ -256,7 +256,7 @@ KeyUp		    EQU	    $5E		                ; UP key
 KeyDown		    EQU 	$0A		                ; DOWN key
 *******************************************************************************
 *******************************************************************************
-CurrentX        FCB     0 
+CurrentX        FCB     0
 CurrentY        FCB     0
 CurrentRotation FCB     0
 Score           FDB     0
@@ -346,20 +346,5 @@ Info            FCC     /````````````````````/
                 FCB     $5E
                 FCC     /z`ROTATE`````````/
                 FCC     /````````````````````/
-VideoRAMBuffer  FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
-                FCC     /                                /
+VideoRAMBuffer  RMB     32*16
                 END     Start
