@@ -3,9 +3,39 @@
 *******************************************************************************
                 ORG     $3F00
 Start           JSR     SaveVideoRAM            ; save video ram to restore on exit
+                JSR     InitGame
                 JSR     DrawInfo
-                JSR     DrawField
+                JSR     NewPiece
                 JSR     DrawNextPiece
+                JSR     DrawField
+
+MainLoop        JSR     [POLCAT]                ; Polls keyboard
+                BEQ     main2
+                LDA     CurrentRotation
+                INCA 
+                CMPA    #4
+                BNE     saveRotation
+                CLRA
+saveRotation    STA     CurrentRotation                
+main2           NOP
+                JSR     Sleep   
+drawField       JSR     DrawField
+                CLRA    
+                LDB     CurrentX
+                TFR     D,X 
+                LDB     CurrentY
+                CMPB    #13
+                BEQ     EndGame
+                TFR     D,Y  
+                LDA     #1                      ; piece to draw 
+                LDB     CurrentRotation
+                JSR     DrawPiece 
+
+                INC     CurrentY
+                JMP     MainLoop
+
+
+
 
 
                 LDD     #$0100                   ; Piece to draw & rotation
@@ -39,13 +69,73 @@ GetKey2         JSR     [POLCAT]                ; Polls keyboard
 GetKey3         JSR     [POLCAT]                ; Polls keyboard
                 BEQ     GetKey3
 
-                JSR     RestoreVideoRAM         ; Cleanup and end execution
+EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
                 RTS
 
 
 *******************************************************************************
-
-
+Sleep           PSHU    X,CC
+                LDX     #-1
+sleepLoop       LEAX    -1,X
+                BNE     sleepLoop 
+                PULU    X,CC
+                RTS
+*******************************************************************************
+InitGame        PSHU    A,B,CC 
+                LDD     $112                    ; timer value
+                STD     Seed
+                CLR     Score
+                PULU    A,B,CC
+                RTS
+*******************************************************************************
+NewPiece        PSHU    A,B,CC 
+                LDA     #(FieldWidth/2)-2
+                STA     CurrentX
+                CLR     CurrentY                
+                JSR     Random                  ; Random number in D 
+                CLRA                            ; clear a, otherwise not always work, because negative number?? TODO
+                STD     Dividend
+                LDA     #7                      ; 7 different pieces
+                STA     Divisor 
+                ; do division
+                LDA     #8
+                STA     Remainder
+                LDD     Dividend
+npDivide        ASLB
+                ROLA
+                CMPA    Divisor 
+                BCS     npCheckCount
+                SUBA    Divisor
+                INCB
+npCheckCount    DEC     Remainder
+                BNE     npDivide   
+                ;STA     Remainder
+                ;STB     Quotient
+                STA     NextPiece                             
+                PULU    A,B,CC
+                RTS      
+*******************************************************************************
+* From 6809 Machine Code Programming (David Barrow).pdf p.34
+Random          PSHS    D
+                LDD     Seed
+                ASLB
+                ROLA
+                ADDD    ,S
+                STD     ,S                      ;5, (S) = 3R
+                ASLB                            ;2,
+                ROLA                            ;2, D = 2 * 3R
+                PSHS    B                       ;6, (S) = 2 • 256 * 3R (hibyte)
+                ASLB                            ;2,
+                ROLA                            ;2, D = 4 * 3R
+                ASLB                            ;2,
+                ROLA                            ;2, D = 8 * 3R
+                ADDD    1,S                     ;7, D = 9 * 3R
+                STD     1,S                     ;6, (S+I) = 3 *3 * 3R
+                PULS    A                       ;6,
+                LDB     #41                     ;2, D = 2 • 256 • 3 R + 41
+                SUBD    ,S++ 
+                STD     Seed
+                RTS                             ;5, exit, D = new R. 
 *******************************************************************************
 DrawField       PSHU    A,B,X,Y,CC
                 LDY     #VideoRAM               ; Y points to the real video ram
@@ -166,11 +256,22 @@ KeyUp		    EQU	    $5E		                ; UP key
 KeyDown		    EQU 	$0A		                ; DOWN key
 *******************************************************************************
 *******************************************************************************
+CurrentX        FCB     0 
+CurrentY        FCB     0
+CurrentRotation FCB     0
+Score           FDB     0
+
+NextPiece       FCB     $3                      ; next piece to draw, TODO random
+Seed            FDB     0
+Dividend        FDB     0
+Divisor         FCB     0
+Remainder       FCB     0
+Quotient        FCB     0
+
+
 *******************************************************************************
 PieceLen        EQU     16
 PieceStructLen  EQU     1+(4*PieceLen)          ; character + 4 different rotations
-
-NextPiece       FCB     $3                      ; next piece to draw, TODO random
 Pieces          FCB     128+15+(16*7)           ; color piece 1
                 FCC     /..X...X...X...X./      ; rotation 0
                 FCC     /........XXXX..../      ; rotation 1
