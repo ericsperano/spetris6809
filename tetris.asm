@@ -9,17 +9,39 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
                 JSR     DrawNextPiece
                 JSR     DrawField
 
-MainLoop        JSR     [POLCAT]                ; Polls keyboard
-                BEQ     main2
+MainLoop        JSR     Sleep
+
+                LDA     SpeedCount
+                INCA
+                STA     SpeedCount
+                CMPA    Speed
+                BNE     PollKeyboard
+                LDA     #1
+                STA     ForceDown
+                CLR     SpeedCount
+PollKeyboard    JSR     [POLCAT]                ; Polls keyboard
+                BEQ     chkForceDown
                 LDA     CurrentRotation
                 INCA
                 CMPA    #4
                 BNE     saveRotation
                 CLRA
 saveRotation    STA     CurrentRotation
-main2           NOP
-                JSR     Sleep
-drawField       JSR     DrawField
+chkForceDown    LDA     ForceDown
+                CMPA    #1                         # TODO no need to cmp with we check for 1 or 0 i guess?
+                BNE     draw
+                CLRA
+                LDB     CurrentX
+                TFR     D,X
+                LDB     CurrentY
+                TFR     D,Y
+                LDA     #1                      ; piece to draw TODO currentPiece
+                LDB     CurrentRotation         ; MEEEHHH NEED TO ERASE WITH OLD ROTATION...
+                JSR     ErasePiece
+
+                INC     CurrentY
+                CLR     ForceDown
+draw            NOP
                 CLRA
                 LDB     CurrentX
                 TFR     D,X
@@ -31,43 +53,7 @@ drawField       JSR     DrawField
                 LDB     CurrentRotation
                 JSR     DrawPiece
 
-                INC     CurrentY
                 JMP     MainLoop
-
-
-
-
-
-                LDD     #$0100                   ; Piece to draw & rotation
-                LDX     #5                      ; at X=5
-                LDY     #3                      ; and Y=3
-                JSR     DrawPiece
-GetKey0         JSR     [POLCAT]                ; Polls keyboard
-                BEQ     GetKey0
-
-                JSR     DrawField
-                LDD     #$0101                   ; Piece to draw & rotation
-                LDX     #5                      ; at X=5
-                LDY     #3                      ; and Y=3
-                JSR     DrawPiece
-GetKey1         JSR     [POLCAT]                ; Polls keyboard
-                BEQ     GetKey1
-
-                JSR     DrawField
-                LDD     #$0102                   ; Piece to draw & rotation
-                LDX     #5                      ; at X=5
-                LDY     #3                      ; and Y=3
-                JSR     DrawPiece
-GetKey2         JSR     [POLCAT]                ; Polls keyboard
-                BEQ     GetKey2
-
-                JSR     DrawField
-                LDD     #$0103                   ; Piece to draw & rotation
-                LDX     #5                      ; at X=5
-                LDY     #3                      ; and Y=3
-                JSR     DrawPiece
-GetKey3         JSR     [POLCAT]                ; Polls keyboard
-                BEQ     GetKey3
 
 EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
                 RTS
@@ -75,7 +61,7 @@ EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
 
 *******************************************************************************
 Sleep           PSHU    X,CC
-                LDX     #-1
+                LDX     #SleepTime
 sleepLoop       LEAX    -1,X
                 BNE     sleepLoop
                 PULU    X,CC
@@ -85,6 +71,9 @@ InitGame        PSHU    A,B,CC
                 LDD     $112                    ; timer value
                 STD     Seed
                 CLR     Score
+                CLR     SpeedCount
+                LDA     20
+                STA     Speed
                 PULU    A,B,CC
                 RTS
 *******************************************************************************
@@ -182,7 +171,6 @@ DrawPiece       PSHU    Y,X,A,B,CC
                 TFR     D,Y                     ; Y == video memory where we start to draw
                 ADDD    #(3*32)+4               ; where we stop to draw
                 PSHU    D                       ; is saved on the stack
-
                 LDA     3,U                     ; piece to draw
                 LDB     #PieceStructLen
                 MUL
@@ -213,6 +201,52 @@ dpEnd           PULU    A
                 *LDU     3,U                     ; drop the temp variables
                 PULU    Y,X,A,B,CC              ; restore the registers
                 RTS
+*******************************************************************************
+* ErasePiece:
+* A:            Piece Index
+* B:            Rotation
+* X:            X position
+* Y:            Y position
+*******************************************************************************
+ErasePiece      PSHU    Y,X,A,B,CC
+                TFR     Y,D                     ; b == y position
+                LDA     #32                     ; 32 cols per line
+                MUL
+                ADDD    3,U                     ; add X
+                ADDD    #VideoRAM
+                TFR     D,Y                     ; Y == video memory where we start to draw
+                ADDD    #(3*32)+4               ; where we stop to draw
+                PSHU    D                       ; is saved on the stack
+                LDA     3,U                     ; piece to draw
+                LDB     #PieceStructLen
+                MUL
+                ADDD    #Pieces
+                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+                LEAX    1,X
+                LDA     #PieceLen
+                LDB     4,U                     ; rotation (0 to 4)
+                MUL
+                LEAX    D,X                     ; x now should point to the good rotated shape to draw
+epLoopRow0      LDB     #4                      ; 4 "pixels' per row
+epLoopRow1      LDA     ,X+
+                CMPA    #Dot
+                BNE     epDraw                  ; not a dot, we draw it on screen then
+                LEAY    1,Y                     ; won't draw but still need to move to next pos on screen
+                JMP     epEndDraw
+epDraw          LDA     #ChSpc                  ; the char to draw, from the stack
+                STA     ,Y+
+epEndDraw       DECB
+                BNE     epLoopRow1
+                CMPY    ,U                      ; are we done drawing?
+                BGE     dpEnd
+                LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
+                JMP     epLoopRow0
+epEnd           PULU    A
+                PULU    D
+                *LDU     3,U                     ; drop the temp variables
+                PULU    Y,X,A,B,CC              ; restore the registers
+                RTS
+
 *******************************************************************************
 * DrawNextPiece:
 * A: pieceIdx
@@ -268,7 +302,10 @@ Divisor         FCB     0
 Remainder       FCB     0
 Quotient        FCB     0
 
-
+SleepTime       EQU     500
+ForceDown       FCB     0
+Speed           FCB     0
+SpeedCount      FCB     0
 *******************************************************************************
 PieceLen        EQU     16
 PieceStructLen  EQU     1+(4*PieceLen)          ; character + 4 different rotations
