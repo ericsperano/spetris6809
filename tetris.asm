@@ -2,13 +2,13 @@
 * Tetris for my Color Computer 3                                              *
 *******************************************************************************
 PrepPieceDraw   MACRO
-                CLRA                           
+                CLRA
                 LDB     CurrentX
                 TFR     D,X
                 LDB     CurrentY
                 TFR     D,Y
-                LDA     CurrentPiece          
-                LDB     CurrentRotation         
+                LDA     CurrentPiece
+                LDB     CurrentRotation
                 ENDM
 *******************************************************************************
                 ORG     $3F00
@@ -18,7 +18,7 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
                 JSR     NewPiece
                 JSR     DrawNextPiece
 
-MainLoop        LDA     HasToDraw 
+MainLoop        LDA     HasToDraw
                 BEQ     doSleep                ; HasToDraw is 0, don't draw
                 JSR     DrawField
                 PrepPieceDraw
@@ -26,7 +26,7 @@ MainLoop        LDA     HasToDraw
                 CLR     HasToDraw
 
 doSleep         JSR     Sleep
-                LDA     SpeedCount              
+                LDA     SpeedCount
                 INCA
                 STA     SpeedCount
                 CMPA    Speed                   ; did speedcount reach speed?
@@ -36,21 +36,35 @@ doSleep         JSR     Sleep
                 STA     HasToDraw
                 CLR     SpeedCount
 PollKeyboard    JSR     [POLCAT]                ; Polls keyboard
-                BEQ     chkForceDown
-                LDA     CurrentRotation
+                BEQ     chkForceDown            ; No key KeyUpPressed
+                CMPA    #KeyUp
+                BEQ     PressUp
+                CMPA    #KeySpace
+                BEQ     PressSpc
+                CMPA    #KeyEscape
+                BEQ     EndGame
+                JMP     chkForceDown            ; ignore that key
+
+PressUp         LDA     CurrentRotation
                 INCA
                 CMPA    #4
                 BNE     saveRotation
                 CLRA
 saveRotation    STA     CurrentRotation
                 LDA     #1                      ; a key was pressed so we have to draw
-                STA     HasToDraw                                            
+                STA     HasToDraw
+                JMP     chkForceDown
+
+PressSpc        LDD     #FallSleepTime
+                STD     SleepTime
+
+
 
 chkForceDown    LDA     ForceDown
                 BEQ     MainLoop                ; force down is 0, don't increment y
                 INC     CurrentY
-                CMPY    #13 
-                BEQ     EndGame 
+                CMPY    #13
+                BEQ     EndGame
                 CLR     ForceDown
                 JMP     MainLoop
 
@@ -61,7 +75,7 @@ EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
 
 *******************************************************************************
 Sleep           PSHU    X,CC
-                LDX     #SleepTime
+                LDX     SleepTime
 sleepLoop       LEAX    -1,X
                 BNE     sleepLoop
                 PULU    X,CC
@@ -74,11 +88,13 @@ InitGame        PSHU    A,B,CC
                 CLR     SpeedCount
                 LDA     20
                 STA     Speed
-                JSR     NewPiece 
+                JSR     NewPiece
                 PULU    A,B,CC
                 RTS
 *******************************************************************************
 NewPiece        PSHU    A,B,CC
+                LDD     #RegSleepTime
+                STD     SleepTime
                 LDA     NextPiece
                 STA     CurrentPiece
                 LDA     #1
@@ -96,7 +112,7 @@ NewPiece        PSHU    A,B,CC
                 ; do division
                 LDA     #8
                 STA     Remainder
-                LDD     Dividend                
+                LDD     Dividend
 npDivide        ASLB
                 ROLA
                 CMPA    Divisor
@@ -246,10 +262,15 @@ POLCAT	        EQU	    $A000	                ; read keyboard ROM routine
 ChSpc           EQU     128+(16*0)+15
 ChFieldLeft     EQU     128+(16*0)+10
 ChFieldRight    EQU     128+(16*0)+5
-SleepTime       EQU     200
+RegSleepTime    EQU     200
+FallSleepTime   EQU     1
 
 KeyUp		    EQU	    $5E		                ; UP key
 KeyDown		    EQU 	$0A		                ; DOWN key
+KeyLeft         EQU     $08
+KeyRight        EQU     $09
+KeyEscape       EQU     $03                     ; Break
+KeySpace        EQU     $20
 *******************************************************************************
 *******************************************************************************
 Score           FDB     0
@@ -262,6 +283,7 @@ ForceDown       FCB     0
 Speed           FCB     0
 SpeedCount      FCB     0
 HasToDraw       FCB     0
+SleepTime       FDB     0
 
 Seed            FDB     0
 
