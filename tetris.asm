@@ -10,11 +10,14 @@ PrepPieceDraw   MACRO
                 LDA     CurrentPiece
                 LDB     CurrentRotation
                 ENDM
+GetPieceStruct  MACRO
+                ENDM
 *******************************************************************************
                 ORG     $3F00
 Start           JSR     SaveVideoRAM            ; save video ram to restore on exit
                 JSR     InitGame
                 JSR     DrawInfo
+                JSR     NewPiece
                 JSR     NewPiece
                 JSR     DrawNextPiece
 
@@ -70,8 +73,34 @@ chkForceDown    LDA     ForceDown
 
 EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
                 RTS
-                SWI
+*******************************************************************************
+* DoesPieceFit:
+* A:            Piece Index
+* B:            Rotation
+* X:            X position
+* Y:            Y position
+*******************************************************************************
+DoesPieceFit    PSHU    Y,X,A,B,CC
+                TFR     Y,D                     ; b == y position
+                LDA     #32                     ; 32 cols per line
+                MUL
+                ADDD    3,U                     ; add X
+                ADDD    #VideoRAM
+                TFR     D,Y                     ; Y == video memory where we start to draw
+                ADDD    #(3*32)+4               ; where we stop to draw
+                PSHU    D                       ; is saved on the stack
+                LDA     3,U                     ; piece to draw
+                LDB     #PieceStructLen
+                MUL
+                ADDD    #Pieces
+                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+                LEAX    1,X                     ; don't care about the char used to draw
+                LDA     #PieceLen
+                LDB     4,U                     ; rotation (0 to 4)
+                MUL
+                LEAX    D,X                     ; x now should point to the good rotated shape to draw
 
+                PULU    Y,X,A,B,CC
 
 *******************************************************************************
 Sleep           PSHU    X,CC
@@ -88,7 +117,6 @@ InitGame        PSHU    A,B,CC
                 CLR     SpeedCount
                 LDA     20
                 STA     Speed
-                JSR     NewPiece
                 PULU    A,B,CC
                 RTS
 *******************************************************************************
