@@ -1,23 +1,39 @@
 *******************************************************************************
 * Tetris for my Color Computer 3                                              *
 *******************************************************************************
+PrepPieceDraw   MACRO
+                CLRA                           
+                LDB     CurrentX
+                TFR     D,X
+                LDB     CurrentY
+                TFR     D,Y
+                LDA     CurrentPiece          
+                LDB     CurrentRotation         
+                ENDM
+*******************************************************************************
                 ORG     $3F00
 Start           JSR     SaveVideoRAM            ; save video ram to restore on exit
                 JSR     InitGame
                 JSR     DrawInfo
                 JSR     NewPiece
                 JSR     DrawNextPiece
+
+MainLoop        LDA     HasToDraw 
+                BEQ     doSleep                ; HasToDraw is 0, don't draw
                 JSR     DrawField
+                PrepPieceDraw
+                JSR     DrawPiece
+                CLR     HasToDraw
 
-MainLoop        JSR     Sleep
-
-                LDA     SpeedCount
+doSleep         JSR     Sleep
+                LDA     SpeedCount              
                 INCA
                 STA     SpeedCount
-                CMPA    Speed
-                BNE     PollKeyboard
+                CMPA    Speed                   ; did speedcount reach speed?
+                BNE     PollKeyboard            ; no, piece wont move down
                 LDA     #1
                 STA     ForceDown
+                STA     HasToDraw
                 CLR     SpeedCount
 PollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BEQ     chkForceDown
@@ -27,36 +43,20 @@ PollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BNE     saveRotation
                 CLRA
 saveRotation    STA     CurrentRotation
+                LDA     #1                      ; a key was pressed so we have to draw
+                STA     HasToDraw                                            
+
 chkForceDown    LDA     ForceDown
-                CMPA    #1                         # TODO no need to cmp with we check for 1 or 0 i guess?
-                BNE     draw
-                CLRA
-                LDB     CurrentX
-                TFR     D,X
-                LDB     CurrentY
-                TFR     D,Y
-                LDA     #1                      ; piece to draw TODO currentPiece
-                LDB     CurrentRotation         ; MEEEHHH NEED TO ERASE WITH OLD ROTATION...
-                JSR     ErasePiece
-
+                BEQ     MainLoop                ; force down is 0, don't increment y
                 INC     CurrentY
+                CMPY    #13 
+                BEQ     EndGame 
                 CLR     ForceDown
-draw            NOP
-                CLRA
-                LDB     CurrentX
-                TFR     D,X
-                LDB     CurrentY
-                CMPB    #13
-                BEQ     EndGame
-                TFR     D,Y
-                LDA     #1                      ; piece to draw
-                LDB     CurrentRotation
-                JSR     DrawPiece
-
                 JMP     MainLoop
 
 EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
                 RTS
+                SWI
 
 
 *******************************************************************************
@@ -74,22 +74,29 @@ InitGame        PSHU    A,B,CC
                 CLR     SpeedCount
                 LDA     20
                 STA     Speed
+                JSR     NewPiece 
                 PULU    A,B,CC
                 RTS
 *******************************************************************************
 NewPiece        PSHU    A,B,CC
+                LDA     NextPiece
+                STA     CurrentPiece
+                LDA     #1
+                STA     HasToDraw
                 LDA     #(FieldWidth/2)-2
                 STA     CurrentX
                 CLR     CurrentY
                 JSR     Random                  ; Random number in D
-                CLRA                            ; clear a, otherwise not always work, because negative number?? TODO
+                ;ANDA    #%01111111              ; no negative number TODO better solution than CLRA
+                CLRA
+
                 STD     Dividend
                 LDA     #7                      ; 7 different pieces
                 STA     Divisor
                 ; do division
                 LDA     #8
                 STA     Remainder
-                LDD     Dividend
+                LDD     Dividend                
 npDivide        ASLB
                 ROLA
                 CMPA    Divisor
@@ -202,52 +209,6 @@ dpEnd           PULU    A
                 PULU    Y,X,A,B,CC              ; restore the registers
                 RTS
 *******************************************************************************
-* ErasePiece:
-* A:            Piece Index
-* B:            Rotation
-* X:            X position
-* Y:            Y position
-*******************************************************************************
-ErasePiece      PSHU    Y,X,A,B,CC
-                TFR     Y,D                     ; b == y position
-                LDA     #32                     ; 32 cols per line
-                MUL
-                ADDD    3,U                     ; add X
-                ADDD    #VideoRAM
-                TFR     D,Y                     ; Y == video memory where we start to draw
-                ADDD    #(3*32)+4               ; where we stop to draw
-                PSHU    D                       ; is saved on the stack
-                LDA     3,U                     ; piece to draw
-                LDB     #PieceStructLen
-                MUL
-                ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
-                LEAX    1,X
-                LDA     #PieceLen
-                LDB     4,U                     ; rotation (0 to 4)
-                MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
-epLoopRow0      LDB     #4                      ; 4 "pixels' per row
-epLoopRow1      LDA     ,X+
-                CMPA    #Dot
-                BNE     epDraw                  ; not a dot, we draw it on screen then
-                LEAY    1,Y                     ; won't draw but still need to move to next pos on screen
-                JMP     epEndDraw
-epDraw          LDA     #ChSpc                  ; the char to draw, from the stack
-                STA     ,Y+
-epEndDraw       DECB
-                BNE     epLoopRow1
-                CMPY    ,U                      ; are we done drawing?
-                BGE     dpEnd
-                LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
-                JMP     epLoopRow0
-epEnd           PULU    A
-                PULU    D
-                *LDU     3,U                     ; drop the temp variables
-                PULU    Y,X,A,B,CC              ; restore the registers
-                RTS
-
-*******************************************************************************
 * DrawNextPiece:
 * A: pieceIdx
 *******************************************************************************
@@ -285,27 +246,29 @@ POLCAT	        EQU	    $A000	                ; read keyboard ROM routine
 ChSpc           EQU     128+(16*0)+15
 ChFieldLeft     EQU     128+(16*0)+10
 ChFieldRight    EQU     128+(16*0)+5
+SleepTime       EQU     200
 
 KeyUp		    EQU	    $5E		                ; UP key
 KeyDown		    EQU 	$0A		                ; DOWN key
 *******************************************************************************
 *******************************************************************************
+Score           FDB     0
 CurrentX        FCB     0
 CurrentY        FCB     0
+CurrentPiece    FCB     0
+NextPiece       FCB     0
 CurrentRotation FCB     0
-Score           FDB     0
+ForceDown       FCB     0
+Speed           FCB     0
+SpeedCount      FCB     0
+HasToDraw       FCB     0
 
-NextPiece       FCB     $3                      ; next piece to draw, TODO random
 Seed            FDB     0
+
 Dividend        FDB     0
 Divisor         FCB     0
 Remainder       FCB     0
 Quotient        FCB     0
-
-SleepTime       EQU     500
-ForceDown       FCB     0
-Speed           FCB     0
-SpeedCount      FCB     0
 *******************************************************************************
 PieceLen        EQU     16
 PieceStructLen  EQU     1+(4*PieceLen)          ; character + 4 different rotations
@@ -331,19 +294,19 @@ Pieces          FCB     128+15+(16*7)           ; color piece 1
                 FCC     /....XX...XX...../      ; rotation 3
                 FCB     128+15+(16*4)           ; Color piece 5
                 FCC     /.X...XX...X...../      ; rotation 0
-                FCC     /................/      ; rotation 1
-                FCC     /................/      ; rotation 2
-                FCC     /................/      ; rotation 3
+                FCC     /......XX.XX...../      ; rotation 1
+                FCC     /.....X...XX...X./      ; rotation 2
+                FCC     /.....XX.XX....../      ; rotation 3
                 FCB     128+15+(16*5)           ; Color piece 6
                 FCC     /.X...X...XX...../      ; rotation 0
-                FCC     /................/      ; rotation 1
-                FCC     /................/      ; rotation 2
-                FCC     /................/      ; rotation 3
+                FCC     /.....XXX.X....../      ; rotation 1
+                FCC     /.....XX...X...X./      ; rotation 2
+                FCC     /......X.XXX...../      ; rotation 3
                 FCB     128+15+(16*6)           ; Color piece 7
                 FCC     /..X...X..XX...../      ; rotation 0
-                FCC     /................/      ; rotation 1
-                FCC     /................/      ; rotation 2
-                FCC     /................/      ; rotation 3
+                FCC     /.....X...XXX..../      ; rotation 1
+                FCC     /.....XX..X...X../      ; rotation 2
+                FCC     /....XXX...X...../      ; rotation 3
                 FCB     128+15                  ; clear
                 FCC     /XXXXXXXXXXXXXXXX/
 ClearPiece      EQU     7
