@@ -2,13 +2,13 @@ DSK:=tetris.dsk
 BIN:=TETRIS.BIN
 
 clean:
-	rm -rf $(DSK)	
+	rm -rf $(DSK)
 	decb dskini $(DSK)
 
 all: clean
 	decb copy -0 -a -t -r autoexec.bas $(DSK),AUTOEXEC.BAS
 	decb copy -0 -a -t -r autoexec.bas $(DSK),T.BAS
-	lwasm -9bl -p cd -o$(BIN) tetris.asm
+	lwasm -9bl -p cd -o$(BIN) tetris.asm |tee output.log
 	decb copy -2 -b -r $(BIN) $(DSK),$(BIN)
 
 run: all
@@ -17,5 +17,5 @@ run: all
 debug: all
 	mame coco3 -window -debug -flop1 $(DSK)
 
-copy: all 
+copy: all
 	cp $(DSK) /Volumes/COCO3/

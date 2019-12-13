@@ -6,6 +6,18 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
                     JSR     InitGame
                     JSR     DrawInfo
                     JSR     GetNextPiece
+
+                    LDD     CurrentX                ; first check if it would fit
+                    STD     DoesPieceFitX
+                    LDA     #2
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+
+
+
 NewPiece            CLR     ForceDown
                     JSR     GetNextPiece
                     JSR     DrawNextPiece
@@ -36,11 +48,16 @@ chkForceDown        LDA     ForceDown
                     STA     DoesPieceFitR
                     JSR     DoesPieceFit
                     LDA     PieceFitFlag
+
+                    LDA     DoesPieceFitY           ; it does, increment y
+                    STA     CurrentY
+                    JMP     MainLoop
+
                     BEQ     lockPiece               ; doesnt fit, lock in field
                     LDA     DoesPieceFitY           ; it does, increment y
                     STA     CurrentY
                     JMP     MainLoop
-lockPiece           JSR     LockCurrentPiece
+lockPiece           NOP ;JSR     LockCurrentPiece
                     JMP     NewPiece
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
