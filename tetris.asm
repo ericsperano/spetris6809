@@ -6,17 +6,18 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
                     JSR     InitGame
                     JSR     DrawInfo
                     JSR     GetNextPiece
-NewPiece            JSR     GetNextPiece
+NewPiece            CLR     ForceDown
+                    JSR     GetNextPiece
                     JSR     DrawNextPiece
 MainLoop            LDA     HasToDraw
                     BEQ     doSleep                ; HasToDraw is 0, don't draw
                     JSR     DrawField
                     JSR     DrawCurrentPiece
                     CLR     HasToDraw
-doSleep             JSR     Sleep                   ; increment the speed count                    
-                    INC     SpeedCount              
-                    LDA     SpeedCount              ; and force down if it reached speed max 
-                    CMPA    Speed                   
+doSleep             JSR     Sleep                   ; increment the speed count
+                    INC     SpeedCount
+                    LDA     SpeedCount              ; and force down if it reached speed max
+                    CMPA    Speed
                     BNE     pollKeyboard           ; if not go straight to poll keyboard
                     INC     ForceDown
                     INC     HasToDraw
@@ -26,12 +27,21 @@ pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
                     JSR     CheckKeyboard
 chkForceDown        LDA     ForceDown
                     BEQ     MainLoop                ; force down is 0, don't increment y
-                    INC     CurrentY
+                    LDD     CurrentX                ; first check if it would fit
+                    STD     DoesPieceFitX
                     LDA     CurrentY
-                    CMPA    #13
-                    BEQ     EndGame
-                    CLR     ForceDown
+                    INCA
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     lockPiece               ; doesnt fit, lock in field
+                    LDA     DoesPieceFitY           ; it does, increment y
+                    STA     CurrentY
                     JMP     MainLoop
+lockPiece           JSR     LockCurrentPiece
+                    JMP     NewPiece
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
 *******************************************************************************
@@ -43,7 +53,7 @@ InitGame            PSHU    A,B,CC
                     LDA     20
                     STA     Speed
                     PULU    A,B,CC
-                    RTS            
+                    RTS
 *******************************************************************************
 _DoesPieceFitCK     MACRO
                     STD     DoesPieceFitX
@@ -54,7 +64,7 @@ _DoesPieceFitCK     MACRO
                     JSR     DoesPieceFit
                     LDA     PieceFitFlag
                     BEQ     endCheckKeyboard
-                    ENDM                    
+                    ENDM
 *******************************************************************************
 CheckKeyboard       CMPA    #KeyLeft                ; left
                     BEQ     PressLeft
@@ -64,17 +74,17 @@ CheckKeyboard       CMPA    #KeyLeft                ; left
                     BEQ     PressUp
                     CMPA    #KeySpace               ; Spacebar
                     BEQ     PressSpc
-                    CMPA    #KeyEscape              ; Break
-                    BEQ     EndGame
+                    CMPA    #KeyEscape              ; Break     TODO does not exit
+                    BNE     EndGame
                     JMP     endCheckKeyboard         ; ignore other keys
 PressLeft           LDD     CurrentX
-                    DECB 
+                    DECB
                     _DoesPieceFitCK
                     DEC     CurrentX+1
                     INC     HasToDraw
                     JMP     endCheckKeyboard
 PressRight          LDD     CurrentX
-                    INCB 
+                    INCB
                     _DoesPieceFitCK
                     INC     CurrentX+1
                     INC     HasToDraw
@@ -85,7 +95,7 @@ PressUp             LDA     CurrentRotation         ; KeyUp! Increment rotation
                     BNE     pressUpEnd
                     CLRA
 pressUpEnd          STA     DoesPieceFitR
-                    LDD     CurrentX     
+                    LDD     CurrentX
                     STD     DoesPieceFitX
                     LDA     CurrentY
                     STA     DoesPieceFitY
@@ -105,7 +115,7 @@ GetNextPiece        PSHU    A,B,CC
                     STD     SleepTime
                     LDA     NextPiece
                     STA     CurrentPiece
-                    INC     HasToDraw                    
+                    INC     HasToDraw
                     LDD     #(FieldWidth/2)-2
                     STD     CurrentX
                     CLR     CurrentY
@@ -135,7 +145,7 @@ gnpCheckCount       DEC     Remainder
 DrawCurrentPiece    PSHU    A,B,X,Y,CC
                     LDX     #PiecesColor            ; get the char to draw
                     LDA     CurrentPiece            ; by indexing PiecesColor
-                    LDA     A,X                     
+                    LDA     A,X
                     STA     dcpDrawChar             ; the char used to draw
                     LDA     #32                     ; 32 cols per line
                     LDB     CurrentY                ; y position
@@ -176,7 +186,7 @@ dcpDrawEndAddr      FDB     0
 DrawNextPiece       PSHU    A,B,X,Y,CC
                     LDX     #PiecesColor            ; get the char to draw
                     LDA     NextPiece                ; by indexing PiecesColor
-                    LDA     A,X            
+                    LDA     A,X
                     STA     dnpDrawChar             ; the char used to draw
                     LDA     #32                     ; 32 cols per line
                     LDB     #5                      ; y position
@@ -287,7 +297,49 @@ dpfEndCheck         DECB
                     JMP     dpfLoopRow0
 dpfEnd              PULU    Y,X,A,B,CC              ; restore the registers
                     RTS
-dpfFieldEndAddr     FDB     0                
+dpfFieldEndAddr     FDB     0
+*******************************************************************************
+LockCurrentPiece    PSHU    Y,X,A,B,CC
+                    LDX     #PiecesColor            ; get the char to draw
+                    LDA     CurrentPiece            ; by indexing PiecesColor
+                    LDA     A,X
+                    STA     lcpDrawChar             ; the char used to draw
+                    LDB     CurrentY
+                    LDA     #FieldWidth             ; cols per line
+                    MUL
+                    ADDD    CurrentY                ; add X
+                    ADDD    #Field
+                    TFR     D,Y                     ; Y == field pos where we start to check
+                    ADDD    #(3*FieldWidth)+4       ; where we stop to check
+                    STD     dpfFieldEndAddr
+                    LDA     CurrentPiece
+                    LDB     #PieceStructLen
+                    MUL
+                    ADDD    #Pieces
+                    TFR     D,X                     ; X now points to the beginning of the piece struct to check
+                    LDA     #PieceLen
+                    LDB     CurrentRotation
+                    MUL
+                    LEAX    D,X                     ; x now should point to the good rotated shape to draw
+lcpLoopRow0         LDB     #4                      ; 4 "pixels' per row
+lcpLoopRow1         LDA     ,X+
+                    CMPA    #Dot
+                    BNE     lcpLock                 ; not a dot, we must check
+                    LEAY    1,Y                     ; won't check but still need to move to next pos on the field
+                    JMP     lcpEndLock
+lcpLock             LDA     lcpDrawChar
+                    STA     ,Y
+lcpEndLock          DECB
+                    BNE     lcpLoopRow1
+                    CMPY    lcpFieldEndAddr         ; are we done checking?
+                    BGE     lcpEnd
+                    LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    JMP     lcpLoopRow0
+lcpEnd              PULU    Y,X,A,B,CC              ; restore the registers
+                    RTS
+lcpDrawChar         FCB     0
+lcpFieldEndAddr     FDB     0
+
 *******************************************************************************
 * From 6809 Machine Code Programming (David Barrow).pdf p.34
 Random              PSHS    D
@@ -354,7 +406,7 @@ Speed               FCB     0
 SpeedCount          FCB     0
 HasToDraw           FCB     0
 SleepTime           FDB     0
-DoesPieceFitX       FDB     0       
+DoesPieceFitX       FDB     0
 DoesPieceFitY       FCB     0
 DoesPieceFitR       FCB     0
 PieceFitFlag        FCB     0
