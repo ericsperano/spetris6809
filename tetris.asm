@@ -21,6 +21,18 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
                 JSR     NewPiece
                 JSR     DrawNextPiece
 
+                CLRA
+                LDB     #1
+                TFR     D,X
+                LDB     #0
+                TFR     D,Y
+                LDA     #0
+                LDB     #0
+                JSR     DoesPieceFit
+                LDA     pieceFitFlag
+
+
+
 MainLoop        LDA     HasToDraw
                 BEQ     doSleep                ; HasToDraw is 0, don't draw
                 JSR     DrawField
@@ -81,26 +93,46 @@ EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
 * Y:            Y position
 *******************************************************************************
 DoesPieceFit    PSHU    Y,X,A,B,CC
+                LDA     #1
+                STA     pieceFitFlag
                 TFR     Y,D                     ; b == y position
                 LDA     #32                     ; 32 cols per line
                 MUL
                 ADDD    3,U                     ; add X
-                ADDD    #VideoRAM
-                TFR     D,Y                     ; Y == video memory where we start to draw
-                ADDD    #(3*32)+4               ; where we stop to draw
+                ADDD    #Field
+                TFR     D,Y                     ; Y == field pos where we start to check
+                ADDD    #(3*32)+4               ; where we stop to check
                 PSHU    D                       ; is saved on the stack
-                LDA     3,U                     ; piece to draw
+                LDA     3,U                     ; piece to check
                 LDB     #PieceStructLen
                 MUL
                 ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+                TFR     D,X                     ; X now points to the beginning of the piece struct to check
                 LEAX    1,X                     ; don't care about the char used to draw
                 LDA     #PieceLen
                 LDB     4,U                     ; rotation (0 to 4)
                 MUL
                 LEAX    D,X                     ; x now should point to the good rotated shape to draw
-
-                PULU    Y,X,A,B,CC
+dpfLoopRow0     LDB     #4                      ; 4 "pixels' per row
+dpfLoopRow1     LDA     ,X+
+                CMPA    #Dot
+                BNE     dpfCheck                ; not a dot, we must check
+                LEAY    1,Y                     ; won't check but still need to move to next pos on the field
+                JMP     dpfEndCheck
+dpfCheck        LDA     ,Y+                     ; the char to draw, from the stack
+                CMPA    #ChSpc
+                BEQ     dpfEndCheck
+                CLR     pieceFitFlag            ; piece does not fit
+                JMP     dpfEnd
+dpfEndCheck     DECB
+                BNE     dpfLoopRow1
+                CMPY    ,U                     ; are we done checking?
+                BGE     dpfEnd
+                LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
+                JMP     dpfLoopRow0
+dpfEnd          PULU    D
+                PULU    Y,X,A,B,CC              ; restore the registers
+                RTS
 
 *******************************************************************************
 Sleep           PSHU    X,CC
@@ -301,6 +333,9 @@ KeyEscape       EQU     $03                     ; Break
 KeySpace        EQU     $20
 *******************************************************************************
 *******************************************************************************
+pieceFitFlag    FCB     0
+
+
 Score           FDB     0
 CurrentX        FCB     0
 CurrentY        FCB     0
