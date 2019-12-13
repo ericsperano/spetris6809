@@ -1,448 +1,432 @@
 *******************************************************************************
 * Tetris for my Color Computer 3                                              *
 *******************************************************************************
-PrepPieceDraw   MACRO
-                CLRA
-                LDB     CurrentX
-                TFR     D,X
-                LDB     CurrentY
-                TFR     D,Y
-                LDA     CurrentPiece
-                LDB     CurrentRotation
-                ENDM
-GetPieceStruct  MACRO
-                ENDM
+                    ORG     $3F00
+Start               JSR     SaveVideoRAM            ; save video ram to restore on exit
+                    JSR     InitGame
+                    JSR     DrawInfo
+                    JSR     GetNextPiece
+NewPiece            JSR     GetNextPiece
+                    JSR     DrawNextPiece
+MainLoop            LDA     HasToDraw
+                    BEQ     doSleep                ; HasToDraw is 0, don't draw
+                    JSR     DrawField
+                    JSR     DrawCurrentPiece
+                    CLR     HasToDraw
+doSleep             JSR     Sleep                   ; increment the speed count                    
+                    INC     SpeedCount              
+                    LDA     SpeedCount              ; and force down if it reached speed max 
+                    CMPA    Speed                   
+                    BNE     pollKeyboard           ; if not go straight to poll keyboard
+                    INC     ForceDown
+                    INC     HasToDraw
+                    CLR     SpeedCount
+pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
+                    BEQ     chkForceDown            ; No key pressed
+                    JSR     CheckKeyboard
+chkForceDown        LDA     ForceDown
+                    BEQ     MainLoop                ; force down is 0, don't increment y
+                    INC     CurrentY
+                    LDA     CurrentY
+                    CMPA    #13
+                    BEQ     EndGame
+                    CLR     ForceDown
+                    JMP     MainLoop
+EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
+                    RTS
 *******************************************************************************
-                ORG     $3F00
-Start           JSR     SaveVideoRAM            ; save video ram to restore on exit
-                JSR     InitGame
-                JSR     DrawInfo
-                JSR     NewPiece
-                JSR     NewPiece
-                JSR     DrawNextPiece
-
-                CLRA
-                LDB     #1
-                TFR     D,X
-                LDB     #0
-                TFR     D,Y
-                LDA     #1
-                LDB     #2
-                *JSR     DrawPiece
-                *JSR     DoesPieceFit
-                *LDA     pieceFitFlag
-
-
-
-MainLoop        LDA     HasToDraw
-                BEQ     doSleep                ; HasToDraw is 0, don't draw
-                JSR     DrawField
-                PrepPieceDraw
-                JSR     DrawPiece
-                CLR     HasToDraw
-
-doSleep         JSR     Sleep
-                LDA     SpeedCount
-                INCA
-                STA     SpeedCount
-                CMPA    Speed                   ; did speedcount reach speed?
-                BNE     PollKeyboard            ; no, piece wont move down
-                LDA     #1
-                STA     ForceDown
-                STA     HasToDraw
-                CLR     SpeedCount
-PollKeyboard    JSR     [POLCAT]                ; Polls keyboard
-                BEQ     chkForceDown            ; No key KeyUpPressed
-                CMPA    #KeyUp
-                BEQ     PressUp
-                CMPA    #KeySpace
-                BEQ     PressSpc
-                CMPA    #KeyEscape
-                BEQ     EndGame
-                JMP     chkForceDown            ; ignore that key
-
-PressUp         LDA     CurrentRotation
-                INCA
-                CMPA    #4
-                BNE     saveRotation
-                CLRA
-saveRotation    STA     CurrentRotation
-                LDA     #1                      ; a key was pressed so we have to draw
-                STA     HasToDraw
-                JMP     chkForceDown
-
-PressSpc        LDD     #FallSleepTime
-                STD     SleepTime
-
-
-
-chkForceDown    LDA     ForceDown
-                BEQ     MainLoop                ; force down is 0, don't increment y
-                INC     CurrentY
-                CMPY    #13
-                BEQ     EndGame
-                CLR     ForceDown
-                JMP     MainLoop
-
-EndGame         JSR     RestoreVideoRAM         ; Cleanup and end execution
-                RTS
+InitGame            PSHU    A,B,CC
+                    LDD     $112                    ; timer value
+                    STD     Seed
+                    CLR     Score
+                    CLR     SpeedCount
+                    LDA     20
+                    STA     Speed
+                    PULU    A,B,CC
+                    RTS            
 *******************************************************************************
-* DoesPieceFit:
-* A:            Piece Index
-* B:            Rotation
-* X:            X position
-* Y:            Y position
+_DoesPieceFitCK     MACRO
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     endCheckKeyboard
+                    ENDM                    
 *******************************************************************************
-DoesPieceFit    PSHU    Y,X,A,B,CC
-                LDA     #1
-                STA     pieceFitFlag
-                TFR     Y,D                     ; b == y position
-                LDA     #32                     ; 32 cols per line
-                MUL
-                ADDD    3,U                     ; add X
-                ADDD    #Field
-                TFR     D,Y                     ; Y == field pos where we start to check
-                ADDD    #(3*32)+4               ; where we stop to check
-                PSHU    D                       ; is saved on the stack
-                LDA     3,U                     ; piece to check
-                LDB     #PieceStructLen
-                MUL
-                ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to check
-                LDA     #PieceLen
-                LDB     4,U                     ; rotation (0 to 4)
-                MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
-dpfLoopRow0     LDB     #4                      ; 4 "pixels' per row
-dpfLoopRow1     LDA     ,X+
-                CMPA    #Dot
-                BNE     dpfCheck                ; not a dot, we must check
-                LEAY    1,Y                     ; won't check but still need to move to next pos on the field
-                JMP     dpfEndCheck
-dpfCheck        LDA     ,Y+                     ; the char to draw, from the stack
-                CMPA    #ChSpc
-                BEQ     dpfEndCheck
-                CLR     pieceFitFlag            ; piece does not fit
-                JMP     dpfEnd
-dpfEndCheck     DECB
-                BNE     dpfLoopRow1
-                CMPY    ,U                     ; are we done checking?
-                BGE     dpfEnd
-                LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
-                JMP     dpfLoopRow0
-dpfEnd          PULU    D
-                PULU    Y,X,A,B,CC              ; restore the registers
-                RTS
-
+CheckKeyboard       CMPA    #KeyLeft                ; left
+                    BEQ     PressLeft
+                    CMPA    #KeyRight               ; right
+                    BEQ     PressRight
+                    CMPA    #KeyUp                  ; Up
+                    BEQ     PressUp
+                    CMPA    #KeySpace               ; Spacebar
+                    BEQ     PressSpc
+                    CMPA    #KeyEscape              ; Break
+                    BEQ     EndGame
+                    JMP     endCheckKeyboard         ; ignore other keys
+PressLeft           LDD     CurrentX
+                    DECB 
+                    _DoesPieceFitCK
+                    DEC     CurrentX+1
+                    INC     HasToDraw
+                    JMP     endCheckKeyboard
+PressRight          LDD     CurrentX
+                    INCB 
+                    _DoesPieceFitCK
+                    INC     CurrentX+1
+                    INC     HasToDraw
+                    JMP     endCheckKeyboard
+PressUp             LDA     CurrentRotation         ; KeyUp! Increment rotation
+                    INCA
+                    CMPA    #4                      ; or reset to 0 if == 4
+                    BNE     pressUpEnd
+                    CLRA
+pressUpEnd          STA     DoesPieceFitR
+                    LDD     CurrentX     
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    STA     DoesPieceFitY
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     endCheckKeyboard
+                    LDA     DoesPieceFitR
+                    STA     CurrentRotation
+                    INC     HasToDraw
+                    JMP     endCheckKeyboard
+PressSpc            LDD     #FallSleepTime
+                    STD     SleepTime
+endCheckKeyboard    RTS
 *******************************************************************************
-Sleep           PSHU    X,CC
-                LDX     SleepTime
-sleepLoop       LEAX    -1,X
-                BNE     sleepLoop
-                PULU    X,CC
-                RTS
-*******************************************************************************
-InitGame        PSHU    A,B,CC
-                LDD     $112                    ; timer value
-                STD     Seed
-                CLR     Score
-                CLR     SpeedCount
-                LDA     20
-                STA     Speed
-                PULU    A,B,CC
-                RTS
-*******************************************************************************
-NewPiece        PSHU    A,B,CC
-                LDD     #RegSleepTime
-                STD     SleepTime
-                LDA     NextPiece
-                STA     CurrentPiece
-                LDA     #1
-                STA     HasToDraw
-                LDA     #(FieldWidth/2)-2
-                STA     CurrentX
-                CLR     CurrentY
-                JSR     Random                  ; Random number in D
+GetNextPiece        PSHU    A,B,CC
+                    LDD     #RegSleepTime           ; reset sleep time
+                    STD     SleepTime
+                    LDA     NextPiece
+                    STA     CurrentPiece
+                    INC     HasToDraw                    
+                    LDD     #(FieldWidth/2)-2
+                    STD     CurrentX
+                    CLR     CurrentY
+                    JSR     Random                  ; Random number in D
                 ;ANDA    #%01111111              ; no negative number TODO better solution than CLRA
-                CLRA
-
-                STD     Dividend
-                LDA     #7                      ; 7 different pieces
-                STA     Divisor
-                ; do division
-                LDA     #8
-                STA     Remainder
-                LDD     Dividend
-npDivide        ASLB
-                ROLA
-                CMPA    Divisor
-                BCS     npCheckCount
-                SUBA    Divisor
-                INCB
-npCheckCount    DEC     Remainder
-                BNE     npDivide
-                ;STA     Remainder
-                ;STB     Quotient
-                STA     NextPiece
-                PULU    A,B,CC
-                RTS
+                    CLRA
+                    STD     Dividend
+                    LDA     #7                      ; 7 different pieces
+                    STA     Divisor
+                    LDA     #8                      ; do division
+                    STA     Remainder
+                    LDD     Dividend
+gnpDivide           ASLB
+                    ROLA
+                    CMPA    Divisor
+                    BCS     gnpCheckCount
+                    SUBA    Divisor
+                    INCB
+gnpCheckCount       DEC     Remainder
+                    BNE     gnpDivide
+                    ;STA     Remainder
+                    ;STB     Quotient
+                    STA     NextPiece
+                    PULU    A,B,CC
+                    RTS
+*******************************************************************************
+DrawCurrentPiece    PSHU    A,B,X,Y,CC
+                    LDX     #PiecesColor            ; get the char to draw
+                    LDA     CurrentPiece            ; by indexing PiecesColor
+                    LDA     A,X                     
+                    STA     dcpDrawChar             ; the char used to draw
+                    LDA     #32                     ; 32 cols per line
+                    LDB     CurrentY                ; y position
+                    MUL
+                    ADDD    CurrentX                ; add x position
+                    ADDD    #VideoRAM               ; add base pointer
+                    TFR     D,Y                     ; Y == video memory where we start to draw
+                    ADDD    #(3*32)+4               ; where we stop to draw
+                    STD     dcpDrawEndAddr
+                    LDA     CurrentPiece            ; compute the offset in the pieces struct array
+                    LDB     #PieceStructLen
+                    MUL
+                    ADDD    #Pieces                 ; add base pointer
+                    TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+                    LDA     #PieceLen               ; Compute the offset for the rotation
+                    LDB     CurrentRotation
+                    MUL
+                    LEAX    D,X                     ; x now should point to the good rotated shape to draw
+dcpLoopRow0         LDB     #4                      ; 4 "pixels' per row
+dcpLoopRow1         LDA     ,X+
+                    CMPA    #Dot
+                    BNE     dcpDraw                 ; not a dot, we draw it on screen then
+                    LEAY    1,Y                     ; won't draw but still need to move to next pos on screen
+                    JMP     dcpEndDraw
+dcpDraw             LDA     dcpDrawChar             ; the char to draw, from the stack
+                    STA     ,Y+
+dcpEndDraw          DECB
+                    BNE     dcpLoopRow1
+                    CMPY    dcpDrawEndAddr          ; are we done drawing?
+                    BGE     dcpEnd
+                    LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    JMP     dcpLoopRow0
+dcpEnd              PULU    A,B,X,Y,CC              ; restore the registers
+                    RTS
+dcpDrawChar         FCB     0
+dcpDrawEndAddr      FDB     0
+*******************************************************************************
+DrawNextPiece       PSHU    A,B,X,Y,CC
+                    LDX     #PiecesColor            ; get the char to draw
+                    LDA     NextPiece                ; by indexing PiecesColor
+                    LDA     A,X            
+                    STA     dnpDrawChar             ; the char used to draw
+                    LDA     #32                     ; 32 cols per line
+                    LDB     #5                      ; y position
+                    MUL
+                    * TODO no need to compute video ram, could be EQUs
+                    ADDD    #(FieldWidth+2)         ; add x position
+                    ADDD    #VideoRAM               ; add base pointer
+                    TFR     D,Y                     ; Y == video memory where we start to draw
+                    ADDD    #(3*32)+4               ; where we stop to draw
+                    STD     dnpDrawEndAddr
+                    LDA     NextPiece               ; compute the offset in the pieces struct array
+                    LDB     #PieceStructLen
+                    MUL
+                    ADDD    #Pieces                 ; add base pointer
+                    TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+dnpLoopRow0         LDB     #4                      ; 4 "pixels' per row
+dnpLoopRow1         LDA     ,X+
+                    CMPA    #Dot
+                    BNE     dnpDraw                 ; not a dot, we draw it on screen then
+                    LDA     ClearBlock
+                    JMP     dnpEndDraw
+dnpDraw             LDA     dnpDrawChar             ; the char to draw, from the stack
+dnpEndDraw          STA     ,Y+
+                    DECB
+                    BNE     dnpLoopRow1
+                    CMPY    dnpDrawEndAddr          ; are we done drawing?
+                    BGE     dnpEnd
+                    LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    JMP     dnpLoopRow0
+dnpEnd              PULU    A,B,X,Y,CC              ; restore the registers
+                    RTS
+dnpDrawChar         FCB     0
+dnpDrawEndAddr      FDB     0
+*******************************************************************************
+DrawField           PSHU    A,B,X,Y,CC
+                    LDY     #VideoRAM               ; Y points to the real video ram
+                    LDX     #Field                  ; X points to the intro text
+dfLoop1             LDB     #FieldWidth
+dfLoop2             LDA     ,X+                     ; Load in A the byte to display
+                    STA     ,Y+                     ; Put A in video ram
+                    DECB                            ; Decrement counter of chars to display
+                    BNE     dfLoop2                 ; Loop if more to display for this row
+                    TFR     Y,D
+                    ADDD    #(32-FieldWidth)
+                    TFR     D,Y
+                    CMPY    #$600                   ; End of video ram?
+                    BNE     dfLoop1                 ; Loop if more to display
+                    PULU    A,B,X,Y,CC
+                    RTS
+*******************************************************************************
+DrawInfo            LDY     #(VideoRAM+FieldWidth)  ; Y points to the real video ram
+                    LDX     #Info                   ; X points to the intro text
+diLoop1             LDB     #(32-FieldWidth)
+diLoop2             LDA     ,X+                     ; Load in A the byte to display
+                    STA     ,Y+                     ; Put A in video ram
+                    DECB                            ; Decrement counter of chars to display
+                    BNE     diLoop2                 ; Loop if more to display for this row
+                    TFR     Y,D
+                    ADDD    #FieldWidth
+                    TFR     D,Y
+                    CMPY    #$60C                   ; End of video ram?
+                    BNE     diLoop1                 ; Loop if more to display
+                    RTS
+*******************************************************************************
+Sleep               PSHU    X,CC
+                    LDX     SleepTime
+sleepLoop           LEAX    -1,X
+                    BNE     sleepLoop
+                    PULU    X,CC
+                    RTS
+*******************************************************************************
+DoesPieceFit        PSHU    Y,X,A,B,CC
+                    LDA     #1                      ; piece fit by default
+                    STA     PieceFitFlag
+                    LDB     DoesPieceFitY
+                    LDA     #FieldWidth             ; cols per line
+                    MUL
+                    ADDD    DoesPieceFitX           ; add X
+                    ADDD    #Field
+                    TFR     D,Y                     ; Y == field pos where we start to check
+                    ADDD    #(3*FieldWidth)+4       ; where we stop to check
+                    STD     dpfFieldEndAddr
+                    LDA     CurrentPiece
+                    LDB     #PieceStructLen
+                    MUL
+                    ADDD    #Pieces
+                    TFR     D,X                     ; X now points to the beginning of the piece struct to check
+                    LDA     #PieceLen
+                    LDB     DoesPieceFitR
+                    MUL
+                    LEAX    D,X                     ; x now should point to the good rotated shape to draw
+dpfLoopRow0         LDB     #4                      ; 4 "pixels' per row
+dpfLoopRow1         LDA     ,X+
+                    CMPA    #Dot
+                    BNE     dpfCheck                ; not a dot, we must check
+                    LEAY    1,Y                     ; won't check but still need to move to next pos on the field
+                    JMP     dpfEndCheck
+dpfCheck            LDA     ,Y+                     ; the char to draw, from the stack
+                    CMPA    #ChSpc
+                    BEQ     dpfEndCheck
+                    CLR     PieceFitFlag            ; piece does not fit
+                    JMP     dpfEnd
+dpfEndCheck         DECB
+                    BNE     dpfLoopRow1
+                    CMPY    dpfFieldEndAddr         ; are we done checking?
+                    BGE     dpfEnd
+                    LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    JMP     dpfLoopRow0
+dpfEnd              PULU    Y,X,A,B,CC              ; restore the registers
+                    RTS
+dpfFieldEndAddr     FDB     0                
 *******************************************************************************
 * From 6809 Machine Code Programming (David Barrow).pdf p.34
-Random          PSHS    D
-                LDD     Seed
-                ASLB
-                ROLA
-                ADDD    ,S
-                STD     ,S                      ;5, (S) = 3R
-                ASLB                            ;2,
-                ROLA                            ;2, D = 2 * 3R
-                PSHS    B                       ;6, (S) = 2 • 256 * 3R (hibyte)
-                ASLB                            ;2,
-                ROLA                            ;2, D = 4 * 3R
-                ASLB                            ;2,
-                ROLA                            ;2, D = 8 * 3R
-                ADDD    1,S                     ;7, D = 9 * 3R
-                STD     1,S                     ;6, (S+I) = 3 *3 * 3R
-                PULS    A                       ;6,
-                LDB     #41                     ;2, D = 2 • 256 • 3 R + 41
-                SUBD    ,S++
-                STD     Seed
-                RTS                             ;5, exit, D = new R.
+Random              PSHS    D
+                    LDD     Seed
+                    ASLB
+                    ROLA
+                    ADDD    ,S
+                    STD     ,S                      ;5, (S) = 3R
+                    ASLB                            ;2,
+                    ROLA                            ;2, D = 2 * 3R
+                    PSHS    B                       ;6, (S) = 2 • 256 * 3R (hibyte)
+                    ASLB                            ;2,
+                    ROLA                            ;2, D = 4 * 3R
+                    ASLB                            ;2,
+                    ROLA                            ;2, D = 8 * 3R
+                    ADDD    1,S                     ;7, D = 9 * 3R
+                    STD     1,S                     ;6, (S+I) = 3 *3 * 3R
+                    PULS    A                       ;6,
+                    LDB     #41                     ;2, D = 2 • 256 • 3 R + 41
+                    SUBD    ,S++
+                    STD     Seed
+                    RTS                             ;5, exit, D = new R.
 *******************************************************************************
-DrawField       PSHU    A,B,X,Y,CC
-                LDY     #VideoRAM               ; Y points to the real video ram
-                LDX     #Field                  ; X points to the intro text
-dfLoop1         LDB     #FieldWidth
-dfLoop2         LDA     ,X+                     ; Load in A the byte to display
-                STA     ,Y+                     ; Put A in video ram
-                DECB                            ; Decrement counter of chars to display
-                BNE     dfLoop2                 ; Loop if more to display for this row
-                TFR     Y,D
-                ADDD    #(32-FieldWidth)
-                TFR     D,Y
-                CMPY    #$600                   ; End of video ram?
-                BNE     dfLoop1                 ; Loop if more to display
-                PULU    A,B,X,Y,CC
-                RTS
+SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
+                    LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
+LoopSaveVRAM        LDA     ,Y+             ; Load in A the real video byte
+                    STA     ,X+             ; And store it in the saved buffer
+                    CMPY    #$600           ; At the end of the video ram?
+                    BNE     LoopSaveVRAM
+                    RTS
 *******************************************************************************
-DrawInfo        LDY     #(VideoRAM+FieldWidth)  ; Y points to the real video ram
-                LDX     #Info                   ; X points to the intro text
-diLoop1         LDB     #(32-FieldWidth)
-diLoop2         LDA     ,X+                     ; Load in A the byte to display
-                STA     ,Y+                     ; Put A in video ram
-                DECB                            ; Decrement counter of chars to display
-                BNE     diLoop2                 ; Loop if more to display for this row
-                TFR     Y,D
-                ADDD    #FieldWidth
-                TFR     D,Y
-                CMPY    #$60C                   ; End of video ram?
-                BNE     diLoop1                 ; Loop if more to display
-                RTS
+RestoreVideoRAM     LDY     #VideoRAM       ; Y points to the real video ram
+                    LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
+loopRestoreVRAM     LDA     ,X+             ; Load in A the saved video byte
+                    STA     ,Y+             ; And put in in real video ram
+                    CMPY    #$600           ; At the end of the video ram?
+                    BNE     loopRestoreVRAM
+                    RTS
 *******************************************************************************
-* DrawPiece:
-* A:            Piece Index
-* B:            Rotation
-* X:            X position
-* Y:            Y position
+FieldWidth          EQU     12
+Dot                 EQU     $2E
+VideoRAM            EQU     $400                    ; video ram address
+POLCAT	            EQU	    $A000	                ; read keyboard ROM routine
+ChSpc               EQU     128+(16*0)+15
+ChFieldLeft         EQU     128+(16*0)+10
+ChFieldRight        EQU     128+(16*0)+5
+RegSleepTime        EQU     200
+FallSleepTime       EQU     1
+KeyUp		        EQU	    $5E		                ; UP key
+KeyDown		        EQU 	$0A		                ; DOWN key
+KeyLeft             EQU     $08
+KeyRight            EQU     $09
+KeyEscape           EQU     $03                     ; Break
+KeySpace            EQU     $20
 *******************************************************************************
-DrawPiece       PSHU    CC
-                PSHU    B
-                PSHU    A
-                PSHU    X
-                PSHU    Y
+Score               FDB     0
+CurrentX            FDB     0
+CurrentY            FCB     0
+CurrentPiece        FCB     0
+NextPiece           FCB     0
+CurrentRotation     FCB     0
+ForceDown           FCB     0
+Speed               FCB     0
+SpeedCount          FCB     0
+HasToDraw           FCB     0
+SleepTime           FDB     0
+DoesPieceFitX       FDB     0       
+DoesPieceFitY       FCB     0
+DoesPieceFitR       FCB     0
+PieceFitFlag        FCB     0
 
-                LDX     #PiecesColor
-                LDA     A,X
-                PSHU    A                       ; the char used to draw
+Seed                FDB     0
+Dividend            FDB     0
+Divisor             FCB     0
+Remainder           FCB     0
+Quotient            FCB     0
+*******************************************************************************
+PiecesColor         FCB     128+15+(16*7)           ; color piece 1
+                    FCB     128+15+16               ; color piece 2
+                    FCB     128+15+(16*2)           ; color piece 3
+                    FCB     128+15+(16*3)           ; Color piece 4
+                    FCB     128+15+(16*4)           ; Color piece 5
+                    FCB     128+15+(16*5)           ; Color piece 6
+                    FCB     128+15+(16*6)           ; Color piece 7
+ClearBlock          FCB     128+15                  ; clear
 
-                LDD     1,U                     ; y position
-                LDA     #32                     ; 32 cols per line
-                MUL
-                ADDD    3,U                     ; add X
-                ADDD    #VideoRAM
-                TFR     D,Y                     ; Y == video memory where we start to draw
-                ADDD    #(3*32)+4               ; where we stop to draw
-                PSHU    D                       ; is saved on the stack
-                LDA     6,U                     ; piece to draw
-                LDB     #PieceStructLen
-                MUL
-                ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
-                LDA     #PieceLen
-                LDB     7,U                     ; rotation (0 to 4)
-                MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
-dpLoopRow0      LDB     #4                      ; 4 "pixels' per row
-dpLoopRow1      LDA     ,X+
-                CMPA    #Dot
-                BNE     dpDraw                  ; not a dot, we draw it on screen then
-                LEAY    1,Y                     ; won't draw but still need to move to next pos on screen
-                JMP     dpEndDraw
-dpDraw          LDA     2,U                     ; the char to draw, from the stack
-                STA     ,Y+
-dpEndDraw       DECB
-                BNE     dpLoopRow1
-                CMPY    ,U                     ; are we done drawing?
-                BGE     dpEnd
-                LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
-                JMP     dpLoopRow0
-dpEnd           PULU    D
-                PULU    A
-                PULU    Y
-                PULU    X
-                PULU    A
-                PULU    B
-                PULU    CC
-                *LDU     3,U                     ; drop the temp variables
-                *PULU    Y,X,A,B,CC              ; restore the registers
-                RTS
-*******************************************************************************
-* DrawNextPiece:
-* A: pieceIdx
-*******************************************************************************
-DrawNextPiece   PSHU    A,B,X,Y,CC
-                LDA     #ClearPiece
-                CLRB
-                LDX     #(FieldWidth+2)
-                LDY     #5
-                JSR     DrawPiece
-                LDA     NextPiece
-                JSR     DrawPiece
-                PULU    A,B,X,Y,CC
-                RTS
-*******************************************************************************
-SaveVideoRAM    LDY     #VideoRAM       ; Y points to the real video ram
-                LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
-LoopSaveVRAM    LDA     ,Y+             ; Load in A the real video byte
-                STA     ,X+             ; And store it in the saved buffer
-                CMPY    #$600           ; At the end of the video ram?
-                BNE     LoopSaveVRAM
-                RTS
-*******************************************************************************
-RestoreVideoRAM LDY     #VideoRAM       ; Y points to the real video ram
-                LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
-LoopRestoreVRAM LDA     ,X+             ; Load in A the saved video byte
-                STA     ,Y+             ; And put in in real video ram
-                CMPY    #$600           ; At the end of the video ram?
-                BNE     LoopRestoreVRAM
-                RTS
-*******************************************************************************
-FieldWidth      EQU     12
-Dot             EQU     $2E
-VideoRAM        EQU     $400                    ; video ram address
-POLCAT	        EQU	    $A000	                ; read keyboard ROM routine
-ChSpc           EQU     128+(16*0)+15
-ChFieldLeft     EQU     128+(16*0)+10
-ChFieldRight    EQU     128+(16*0)+5
-RegSleepTime    EQU     200
-FallSleepTime   EQU     1
-
-KeyUp		    EQU	    $5E		                ; UP key
-KeyDown		    EQU 	$0A		                ; DOWN key
-KeyLeft         EQU     $08
-KeyRight        EQU     $09
-KeyEscape       EQU     $03                     ; Break
-KeySpace        EQU     $20
-*******************************************************************************
-*******************************************************************************
-pieceFitFlag    FCB     0
-
-
-Score           FDB     0
-CurrentX        FCB     0
-CurrentY        FCB     0
-CurrentPiece    FCB     0
-NextPiece       FCB     0
-CurrentRotation FCB     0
-ForceDown       FCB     0
-Speed           FCB     0
-SpeedCount      FCB     0
-HasToDraw       FCB     0
-SleepTime       FDB     0
-
-Seed            FDB     0
-
-Dividend        FDB     0
-Divisor         FCB     0
-Remainder       FCB     0
-Quotient        FCB     0
-*******************************************************************************
-PiecesColor     FCB     128+15+(16*7)           ; color piece 1
-                FCB     128+15+16               ; color piece 2
-                FCB     128+15+(16*2)           ; color piece 3
-                FCB     128+15+(16*3)           ; Color piece 4
-                FCB     128+15+(16*4)           ; Color piece 5
-                FCB     128+15+(16*5)           ; Color piece 6
-                FCB     128+15+(16*6)           ; Color piece 7
-                FCB     128+15                  ; clear
-
-PieceLen        EQU     16
-PieceStructLen  EQU     4*PieceLen              ; 4 different rotations
-Pieces          FCC     /..X...X...X...X./      ; rotation 0 piece 0
-                FCC     /........XXXX..../      ; rotation 1
-                FCC     /.X...X...X...X../      ; rotation 2
-                FCC     /....XXXX......../      ; rotation 3
-                FCC     /..X..XX...X...../      ; rotation 0 piece 1
-                FCC     /......X..XXX..../      ; rotation 1
-                FCC     /.....X...XX..X../      ; rotation 2
-                FCC     /....XXX..X....../      ; rotation 3
-                FCC     /.....XX..XX...../      ; rotation 0 piece 2
-                FCC     /.....XX..XX...../      ; rotation 1
-                FCC     /.....XX..XX...../      ; rotation 2
-                FCC     /.....XX..XX...../      ; rotation 3
-                FCC     /..X..XX..X....../      ; rotation 0 piece 3
-                FCC     /.....XX...XX..../      ; rotation 1
-                FCC     /......X..XX..X../      ; rotation 2
-                FCC     /....XX...XX...../      ; rotation 3
-                FCC     /.X...XX...X...../      ; rotation 0 piece 4
-                FCC     /......XX.XX...../      ; rotation 1
-                FCC     /.....X...XX...X./      ; rotation 2
-                FCC     /.....XX.XX....../      ; rotation 3
-                FCC     /.X...X...XX...../      ; rotation 0 piece 5
-                FCC     /.....XXX.X....../      ; rotation 1
-                FCC     /.....XX...X...X./      ; rotation 2
-                FCC     /......X.XXX...../      ; rotation 3
-                FCC     /..X...X..XX...../      ; rotation 0 piece 6
-                FCC     /.....X...XXX..../      ; rotation 1
-                FCC     /.....XX..X...X../      ; rotation 2
-                FCC     /....XXX...X...../      ; rotation 3
-                FCC     /XXXXXXXXXXXXXXXX/
-ClearPiece      EQU     7
-Field           FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                FCC     /############/
-Info            FCC     /````````````````````/
-                FCC     /``SCOREz/
-                FCC     /````````````/
-                FCC     /````````````````````/
-                FCC     /``NEXT`PIECEz```````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /````````````````````/
-                FCC     /``/
-                FCB     $5E
-                FCC     /z`ROTATE`````````/
-                FCC     /````````````````````/
-VideoRAMBuffer  RMB     32*16
-                END     Start
+PieceLen            EQU     16
+PieceStructLen      EQU     4*PieceLen              ; 4 different rotations
+Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
+                    FCC     /........XXXX..../      ; rotation 1
+                    FCC     /.X...X...X...X../      ; rotation 2
+                    FCC     /....XXXX......../      ; rotation 3
+                    FCC     /..X..XX...X...../      ; rotation 0 piece 1
+                    FCC     /......X..XXX..../      ; rotation 1
+                    FCC     /.....X...XX..X../      ; rotation 2
+                    FCC     /....XXX..X....../      ; rotation 3
+                    FCC     /.....XX..XX...../      ; rotation 0 piece 2
+                    FCC     /.....XX..XX...../      ; rotation 1
+                    FCC     /.....XX..XX...../      ; rotation 2
+                    FCC     /.....XX..XX...../      ; rotation 3
+                    FCC     /..X..XX..X....../      ; rotation 0 piece 3
+                    FCC     /.....XX...XX..../      ; rotation 1
+                    FCC     /......X..XX..X../      ; rotation 2
+                    FCC     /....XX...XX...../      ; rotation 3
+                    FCC     /.X...XX...X...../      ; rotation 0 piece 4
+                    FCC     /......XX.XX...../      ; rotation 1
+                    FCC     /.....X...XX...X./      ; rotation 2
+                    FCC     /.....XX.XX....../      ; rotation 3
+                    FCC     /.X...X...XX...../      ; rotation 0 piece 5
+                    FCC     /.....XXX.X....../      ; rotation 1
+                    FCC     /.....XX...X...X./      ; rotation 2
+                    FCC     /......X.XXX...../      ; rotation 3
+                    FCC     /..X...X..XX...../      ; rotation 0 piece 6
+                    FCC     /.....X...XXX..../      ; rotation 1
+                    FCC     /.....XX..X...X../      ; rotation 2
+                    FCC     /....XXX...X...../      ; rotation 3
+* TODO: rmb and set it up in init game instead
+Field               FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
+                    FCC     /############/
+Info                FCC     /``````````````````````SCOREz``````````````````````````````````NEXT`PIECEz```````/
+                    FCC     /````````````````````````````````````````````````````````````````````````````````/
+                    FCC     /````````````````````````````````````````````````````````````````````````````````/
+                    FCC     /``````````````````````````````````````````/
+                    FCB     $5E
+                    FCC     /z`ROTATE`````````````````````````````/
+VideoRAMBuffer      RMB     32*16
+                    END     Start
