@@ -26,10 +26,11 @@ Start           JSR     SaveVideoRAM            ; save video ram to restore on e
                 TFR     D,X
                 LDB     #0
                 TFR     D,Y
-                LDA     #0
-                LDB     #0
-                JSR     DoesPieceFit
-                LDA     pieceFitFlag
+                LDA     #1
+                LDB     #2
+                *JSR     DrawPiece
+                *JSR     DoesPieceFit
+                *LDA     pieceFitFlag
 
 
 
@@ -108,7 +109,6 @@ DoesPieceFit    PSHU    Y,X,A,B,CC
                 MUL
                 ADDD    #Pieces
                 TFR     D,X                     ; X now points to the beginning of the piece struct to check
-                LEAX    1,X                     ; don't care about the char used to draw
                 LDA     #PieceLen
                 LDB     4,U                     ; rotation (0 to 4)
                 MUL
@@ -245,8 +245,17 @@ diLoop2         LDA     ,X+                     ; Load in A the byte to display
 * X:            X position
 * Y:            Y position
 *******************************************************************************
-DrawPiece       PSHU    Y,X,A,B,CC
-                TFR     Y,D                     ; b == y position
+DrawPiece       PSHU    CC
+                PSHU    B
+                PSHU    A
+                PSHU    X
+                PSHU    Y
+
+                LDX     #PiecesColor
+                LDA     A,X
+                PSHU    A                       ; the char used to draw
+
+                LDD     1,U                     ; y position
                 LDA     #32                     ; 32 cols per line
                 MUL
                 ADDD    3,U                     ; add X
@@ -254,15 +263,13 @@ DrawPiece       PSHU    Y,X,A,B,CC
                 TFR     D,Y                     ; Y == video memory where we start to draw
                 ADDD    #(3*32)+4               ; where we stop to draw
                 PSHU    D                       ; is saved on the stack
-                LDA     3,U                     ; piece to draw
+                LDA     6,U                     ; piece to draw
                 LDB     #PieceStructLen
                 MUL
                 ADDD    #Pieces
                 TFR     D,X                     ; X now points to the beginning of the piece struct to draw
-                LDA     ,X+
-                PSHU    A                       ; save the char to draw in the stack
                 LDA     #PieceLen
-                LDB     5,U                     ; rotation (0 to 4)
+                LDB     7,U                     ; rotation (0 to 4)
                 MUL
                 LEAX    D,X                     ; x now should point to the good rotated shape to draw
 dpLoopRow0      LDB     #4                      ; 4 "pixels' per row
@@ -271,18 +278,23 @@ dpLoopRow1      LDA     ,X+
                 BNE     dpDraw                  ; not a dot, we draw it on screen then
                 LEAY    1,Y                     ; won't draw but still need to move to next pos on screen
                 JMP     dpEndDraw
-dpDraw          LDA     ,U                      ; the char to draw, from the stack
+dpDraw          LDA     2,U                     ; the char to draw, from the stack
                 STA     ,Y+
 dpEndDraw       DECB
                 BNE     dpLoopRow1
-                CMPY    1,U                     ; are we done drawing?
+                CMPY    ,U                     ; are we done drawing?
                 BGE     dpEnd
                 LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
                 JMP     dpLoopRow0
-dpEnd           PULU    A
-                PULU    D
+dpEnd           PULU    D
+                PULU    A
+                PULU    Y
+                PULU    X
+                PULU    A
+                PULU    B
+                PULU    CC
                 *LDU     3,U                     ; drop the temp variables
-                PULU    Y,X,A,B,CC              ; restore the registers
+                *PULU    Y,X,A,B,CC              ; restore the registers
                 RTS
 *******************************************************************************
 * DrawNextPiece:
@@ -355,44 +367,45 @@ Divisor         FCB     0
 Remainder       FCB     0
 Quotient        FCB     0
 *******************************************************************************
+PiecesColor     FCB     128+15+(16*7)           ; color piece 1
+                FCB     128+15+16               ; color piece 2
+                FCB     128+15+(16*2)           ; color piece 3
+                FCB     128+15+(16*3)           ; Color piece 4
+                FCB     128+15+(16*4)           ; Color piece 5
+                FCB     128+15+(16*5)           ; Color piece 6
+                FCB     128+15+(16*6)           ; Color piece 7
+                FCB     128+15                  ; clear
+
 PieceLen        EQU     16
-PieceStructLen  EQU     1+(4*PieceLen)          ; character + 4 different rotations
-Pieces          FCB     128+15+(16*7)           ; color piece 1
-                FCC     /..X...X...X...X./      ; rotation 0
+PieceStructLen  EQU     4*PieceLen              ; 4 different rotations
+Pieces          FCC     /..X...X...X...X./      ; rotation 0 piece 0
                 FCC     /........XXXX..../      ; rotation 1
                 FCC     /.X...X...X...X../      ; rotation 2
                 FCC     /....XXXX......../      ; rotation 3
-                FCB     128+15+16               ; color piece 2
-                FCC     /..X..XX...X...../      ; rotation 0
+                FCC     /..X..XX...X...../      ; rotation 0 piece 1
                 FCC     /......X..XXX..../      ; rotation 1
                 FCC     /.....X...XX..X../      ; rotation 2
                 FCC     /....XXX..X....../      ; rotation 3
-                FCB     128+15+(16*2)           ; color piece 3
-                FCC     /.....XX..XX...../      ; rotation 0
+                FCC     /.....XX..XX...../      ; rotation 0 piece 2
                 FCC     /.....XX..XX...../      ; rotation 1
                 FCC     /.....XX..XX...../      ; rotation 2
                 FCC     /.....XX..XX...../      ; rotation 3
-                FCB     128+15+(16*3)           ; Color piece 4
-                FCC     /..X..XX..X....../      ; rotation 0
+                FCC     /..X..XX..X....../      ; rotation 0 piece 3
                 FCC     /.....XX...XX..../      ; rotation 1
                 FCC     /......X..XX..X../      ; rotation 2
                 FCC     /....XX...XX...../      ; rotation 3
-                FCB     128+15+(16*4)           ; Color piece 5
-                FCC     /.X...XX...X...../      ; rotation 0
+                FCC     /.X...XX...X...../      ; rotation 0 piece 4
                 FCC     /......XX.XX...../      ; rotation 1
                 FCC     /.....X...XX...X./      ; rotation 2
                 FCC     /.....XX.XX....../      ; rotation 3
-                FCB     128+15+(16*5)           ; Color piece 6
-                FCC     /.X...X...XX...../      ; rotation 0
+                FCC     /.X...X...XX...../      ; rotation 0 piece 5
                 FCC     /.....XXX.X....../      ; rotation 1
                 FCC     /.....XX...X...X./      ; rotation 2
                 FCC     /......X.XXX...../      ; rotation 3
-                FCB     128+15+(16*6)           ; Color piece 7
-                FCC     /..X...X..XX...../      ; rotation 0
+                FCC     /..X...X..XX...../      ; rotation 0 piece 6
                 FCC     /.....X...XXX..../      ; rotation 1
                 FCC     /.....XX..X...X../      ; rotation 2
                 FCC     /....XXX...X...../      ; rotation 3
-                FCB     128+15                  ; clear
                 FCC     /XXXXXXXXXXXXXXXX/
 ClearPiece      EQU     7
 Field           FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
