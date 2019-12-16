@@ -6,7 +6,6 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
                     JSR     InitGame
                     JSR     DrawInfo
                     JSR     GetNextPiece
-                    JSR     GetNextPiece
 NewPiece            CLR     ForceDown
                     JSR     GetNextPiece
                     JSR     DrawNextPiece
@@ -15,7 +14,11 @@ MainLoop            LDA     HasToDraw
                     JSR     DrawField
                     JSR     DrawCurrentPiece
                     CLR     HasToDraw
-doSleep             JSR     Sleep                   ; increment the speed count
+doSleep             LDA     Falling                 ; skip the sleeping andd stuff if the piece is falling
+                    BEQ     doSleep_
+                    INC     ForceDown
+                    INC     HasToDraw
+doSleep_            JSR     Sleep                   ; increment the speed count
                     INC     SpeedCount
                     LDA     SpeedCount              ; and force down if it reached speed max
                     CMPA    Speed
@@ -30,7 +33,6 @@ pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
                     BNE     EndGame                 ; quit game if QuitGame is 1
 chkForceDown        LDA     ForceDown
                     BEQ     MainLoop                ; force down is 0, don't increment y
-
                     LDD     CurrentX                ; first check if it would fit
                     STD     DoesPieceFitX
                     LDA     CurrentY
@@ -60,7 +62,25 @@ InitGame            PSHU    A,B,CC
                     CLR     SpeedCount
                     LDA     20
                     STA     Speed
+                    JSR     InitField
                     PULU    A,B,CC
+                    RTS
+*******************************************************************************
+InitField           PSHU    A,Y,CC
+                    LDY     #Field
+                    LDA     #ChSpc
+ifLoopClear         STA     ,Y+
+                    CMPY    #FieldBottom
+                    BNE     ifLoopClear
+                    LDY     #Field
+ifLoop0             LDA     #ChFieldLeft
+                    STA     ,Y
+                    LDA     #ChFieldRight
+                    STA     (FieldWidth-1),Y
+                    LEAY    FieldWidth,Y
+                    CMPY    #FieldBottom
+                    BNE     ifLoop0
+                    PULU    A,Y,CC
                     RTS
 *******************************************************************************
 _DoesPieceFitCK     MACRO
@@ -114,13 +134,15 @@ pressUpEnd          STA     DoesPieceFitR
                     STA     CurrentRotation
                     INC     HasToDraw
                     JMP     endCheckKeyboard
-PressSpc            LDD     #FallSleepTime
-                    STD     SleepTime
+PressSpc            INC     Falling
+                ; LDD     #FallSleepTime
+                ;    STD     SleepTime
                     JMP     endCheckKeyboard
 PressBrk            INC     QuitGame
 endCheckKeyboard    RTS
 *******************************************************************************
 GetNextPiece        PSHU    A,B,CC
+                    CLR     Falling
                     LDD     #RegSleepTime           ; reset sleep time
                     STD     SleepTime
                     LDA     NextPiece
@@ -130,7 +152,7 @@ GetNextPiece        PSHU    A,B,CC
                     STD     CurrentX
                     CLR     CurrentY
                     JSR     Random                  ; Random number in D
-                ;ANDA    #%01111111              ; no negative number TODO better solution than CLRA
+                    ;ANDA    #%01111111              ; no negative number TODO better solution than CLRA
                     CLRA
                     STD     Dividend
                     LDA     #7                      ; 7 different pieces
@@ -420,6 +442,7 @@ DoesPieceFitR       FCB     0
 PieceFitFlag        FCB     0
 QuitGame            FCB     0
 
+Falling             FCB     0
 Seed                FDB     0
 Dividend            FDB     0
 Divisor             FCB     0
@@ -466,23 +489,8 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /.....XX..X...X../      ; rotation 2
                     FCC     /....XXX...X...../      ; rotation 3
 * TODO: rmb and set it up in init game instead
-Field               FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCB     ChFieldLeft,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChSpc,ChFieldRight
-                    FCC     /############/
+Field               RMB     FieldWidth*16
+FieldBottom         FCC     /############/
 Info                FCC     /``````````````````````SCOREz``````````````````````````````````NEXT`PIECEz```````/
                     FCC     /````````````````````````````````````````````````````````````````````````````````/
                     FCC     /````````````````````````````````````````````````````````````````````````````````/
