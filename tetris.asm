@@ -6,7 +6,7 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
                     JSR     InitGame
                     JSR     DrawInfo
                     JSR     GetNextPiece
-
+                    JSR     GetNextPiece
 NewPiece            CLR     ForceDown
                     JSR     GetNextPiece
                     JSR     DrawNextPiece
@@ -30,29 +30,24 @@ pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
                     BNE     EndGame                 ; quit game if QuitGame is 1
 chkForceDown        LDA     ForceDown
                     BEQ     MainLoop                ; force down is 0, don't increment y
-                    ;LDD     CurrentX                ; first check if it would fit
-                    ;STD     DoesPieceFitX
-                    ;LDA     CurrentY
-                    ;INCA
-                    INC     CurrentY
+
+                    LDD     CurrentX                ; first check if it would fit
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    INCA
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     lockPiece               ; it doesnt, we lock
+
+                    LDA     DoesPieceFitY           ; it does, increment y
+                    STA     CurrentY
                     CLR     ForceDown
                     JMP     MainLoop
 
-                    ;STA     DoesPieceFitY
-                    ;LDA     CurrentRotation
-                    ;STA     DoesPieceFitR
-                    ;JSR     DoesPieceFit
-                    ;LDA     PieceFitFlag
-
-                    ;LDA     DoesPieceFitY           ; it does, increment y
-                    ;STA     CurrentY
-                    ;JMP     MainLoop
-
-                    ;BEQ     lockPiece               ; doesnt fit, lock in field
-                    ;LDA     DoesPieceFitY           ; it does, increment y
-                    ;STA     CurrentY
-                    ;JMP     MainLoop
-lockPiece           NOP ;JSR     LockCurrentPiece
+lockPiece           JSR     LockCurrentPiece
                     JMP     NewPiece
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
@@ -244,9 +239,7 @@ dfLoop2             LDA     ,X+                     ; Load in A the byte to disp
                     STA     ,Y+                     ; Put A in video ram
                     DECB                            ; Decrement counter of chars to display
                     BNE     dfLoop2                 ; Loop if more to display for this row
-                    TFR     Y,D
-                    ADDD    #(32-FieldWidth)
-                    TFR     D,Y
+                    LEAY    32-FieldWidth,Y
                     CMPY    #$600                   ; End of video ram?
                     BNE     dfLoop1                 ; Loop if more to display
                     PULU    A,B,X,Y,CC
@@ -308,7 +301,7 @@ dpfEndCheck         DECB
                     BNE     dpfLoopRow1
                     CMPY    dpfFieldEndAddr         ; are we done checking?
                     BGE     dpfEnd
-                    LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    LEAY    (FieldWidth-4),Y        ; move at the beginning of next line on video ram (32-width=28)
                     JMP     dpfLoopRow0
 dpfEnd              PULU    Y,X,A,B,CC              ; restore the registers
                     RTS
@@ -322,11 +315,11 @@ LockCurrentPiece    PSHU    Y,X,A,B,CC
                     LDB     CurrentY
                     LDA     #FieldWidth             ; cols per line
                     MUL
-                    ADDD    CurrentY                ; add X
+                    ADDD    CurrentX                ; add X
                     ADDD    #Field
                     TFR     D,Y                     ; Y == field pos where we start to check
                     ADDD    #(3*FieldWidth)+4       ; where we stop to check
-                    STD     dpfFieldEndAddr
+                    STD     lcpFieldEndAddr
                     LDA     CurrentPiece
                     LDB     #PieceStructLen
                     MUL
@@ -343,12 +336,12 @@ lcpLoopRow1         LDA     ,X+
                     LEAY    1,Y                     ; won't check but still need to move to next pos on the field
                     JMP     lcpEndLock
 lcpLock             LDA     lcpDrawChar
-                    STA     ,Y
+                    STA     ,Y+
 lcpEndLock          DECB
                     BNE     lcpLoopRow1
                     CMPY    lcpFieldEndAddr         ; are we done checking?
                     BGE     lcpEnd
-                    LEAY    (FieldWidth-4),Y                    ; move at the beginning of next line on video ram (32-width=28)
+                    LEAY    (FieldWidth-4),Y        ; move at the beginning of next line on video ram (32-width=28)
                     JMP     lcpLoopRow0
 lcpEnd              PULU    Y,X,A,B,CC              ; restore the registers
                     RTS
