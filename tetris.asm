@@ -7,17 +7,6 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
                     JSR     DrawInfo
                     JSR     GetNextPiece
 
-                    LDD     CurrentX                ; first check if it would fit
-                    STD     DoesPieceFitX
-                    LDA     #2
-                    STA     DoesPieceFitY
-                    LDA     CurrentRotation
-                    STA     DoesPieceFitR
-                    JSR     DoesPieceFit
-                    LDA     PieceFitFlag
-
-
-
 NewPiece            CLR     ForceDown
                     JSR     GetNextPiece
                     JSR     DrawNextPiece
@@ -37,32 +26,39 @@ doSleep             JSR     Sleep                   ; increment the speed count
 pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
                     BEQ     chkForceDown            ; No key pressed
                     JSR     CheckKeyboard
+                    LDA     QuitGame
+                    BNE     EndGame                 ; quit game if QuitGame is 1
 chkForceDown        LDA     ForceDown
                     BEQ     MainLoop                ; force down is 0, don't increment y
-                    LDD     CurrentX                ; first check if it would fit
-                    STD     DoesPieceFitX
-                    LDA     CurrentY
-                    INCA
-                    STA     DoesPieceFitY
-                    LDA     CurrentRotation
-                    STA     DoesPieceFitR
-                    JSR     DoesPieceFit
-                    LDA     PieceFitFlag
-
-                    LDA     DoesPieceFitY           ; it does, increment y
-                    STA     CurrentY
+                    ;LDD     CurrentX                ; first check if it would fit
+                    ;STD     DoesPieceFitX
+                    ;LDA     CurrentY
+                    ;INCA
+                    INC     CurrentY
+                    CLR     ForceDown
                     JMP     MainLoop
 
-                    BEQ     lockPiece               ; doesnt fit, lock in field
-                    LDA     DoesPieceFitY           ; it does, increment y
-                    STA     CurrentY
-                    JMP     MainLoop
+                    ;STA     DoesPieceFitY
+                    ;LDA     CurrentRotation
+                    ;STA     DoesPieceFitR
+                    ;JSR     DoesPieceFit
+                    ;LDA     PieceFitFlag
+
+                    ;LDA     DoesPieceFitY           ; it does, increment y
+                    ;STA     CurrentY
+                    ;JMP     MainLoop
+
+                    ;BEQ     lockPiece               ; doesnt fit, lock in field
+                    ;LDA     DoesPieceFitY           ; it does, increment y
+                    ;STA     CurrentY
+                    ;JMP     MainLoop
 lockPiece           NOP ;JSR     LockCurrentPiece
                     JMP     NewPiece
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
 *******************************************************************************
 InitGame            PSHU    A,B,CC
+                    CLR     QuitGame
                     LDD     $112                    ; timer value
                     STD     Seed
                     CLR     Score
@@ -92,7 +88,7 @@ CheckKeyboard       CMPA    #KeyLeft                ; left
                     CMPA    #KeySpace               ; Spacebar
                     BEQ     PressSpc
                     CMPA    #KeyEscape              ; Break     TODO does not exit
-                    BNE     EndGame
+                    LBEQ    PressBrk
                     JMP     endCheckKeyboard         ; ignore other keys
 PressLeft           LDD     CurrentX
                     DECB
@@ -125,6 +121,8 @@ pressUpEnd          STA     DoesPieceFitR
                     JMP     endCheckKeyboard
 PressSpc            LDD     #FallSleepTime
                     STD     SleepTime
+                    JMP     endCheckKeyboard
+PressBrk            INC     QuitGame
 endCheckKeyboard    RTS
 *******************************************************************************
 GetNextPiece        PSHU    A,B,CC
@@ -427,6 +425,7 @@ DoesPieceFitX       FDB     0
 DoesPieceFitY       FCB     0
 DoesPieceFitR       FCB     0
 PieceFitFlag        FCB     0
+QuitGame            FCB     0
 
 Seed                FDB     0
 Dividend            FDB     0
