@@ -81,6 +81,10 @@ InitGame            PSHU    A,B,CC
                     LDA     #$FF
                     STA     Speed
                     JSR     InitField
+                    ; randomize seed
+                    LDD     $112                    ; timer value
+                    JSR     $B4F4                   ; put TIMER into FPAC 1 for max value
+                    JSR     $BF1F                   ; generate a random number
                     PULU    A,B,CC
                     RTS
 *******************************************************************************
