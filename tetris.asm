@@ -9,6 +9,18 @@ Start               JSR     SaveVideoRAM            ; save video ram to restore 
 NewPiece            CLR     ForceDown
                     JSR     GetNextPiece
                     JSR     DrawNextPiece
+
+                    LDD     CurrentX                ; first check if it would fit
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     EndGame
+
+
 MainLoop            LDA     HasToDraw
                     BEQ     doSleep                ; HasToDraw is 0, don't draw
                     JSR     DrawField
@@ -152,7 +164,7 @@ GetNextPiece        PSHU    A,B,CC
                     STD     CurrentX
                     CLR     CurrentY
                     JSR     Random                  ; Random number in D
-                    ;ANDA    #%01111111              ; no negative number TODO better solution than CLRA
+                    ;ANDA    #%01 111111              ; no negative number TODO better solution than CLRA
                     CLRA
                     STD     Dividend
                     LDA     #7                      ; 7 different pieces
