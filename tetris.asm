@@ -1,5 +1,6 @@
 *******************************************************************************
 * Tetris for my Color Computer 3                                              *
+* TODO PieceCount to increment speed
 *******************************************************************************
                     ORG     $3F00
 Start               JSR     SaveVideoRAM            ; save video ram to restore on exit
@@ -18,7 +19,7 @@ NewPiece            CLR     ForceDown
                     STA     DoesPieceFitR
                     JSR     DoesPieceFit
                     LDA     PieceFitFlag
-                    BEQ     EndGame
+                    LBEQ    EndGame
 
 MainLoop            LDA     HasToDraw
                     BEQ     doSleep                ; HasToDraw is 0, don't draw
@@ -61,6 +62,14 @@ chkForceDown        LDA     ForceDown
                     JMP     MainLoop
 
 lockPiece           JSR     LockCurrentPiece
+                    JSR     CheckForLines
+                    LDA     HasLines
+                    LBEQ    NewPiece                ; no lines
+                    JSR     DrawField
+                    ; sleep
+                    JSR     Sleep
+                    JSR     RemoveLines
+
                     JMP     NewPiece
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
@@ -172,7 +181,7 @@ GetNextPiece        PSHU    A,B,CC
                     STD     CurrentX
                     CLR     CurrentY
                     LDD     #7                      ; random number from 1 to 7
-                    JSR     $B4F4                   ;copy D into FPAC 1
+                    JSR     $B4F4                   ;copy D into FPAC 1 (Floating point accumulator)
                     JSR     $BF1F                   ;generate a random number
                     JSR     $B3ED                   ;retrieve FPAC 1; D= your random number
                     DECB                            ; dec 1 because number is between 1 and 7
@@ -376,6 +385,31 @@ lcpEnd              PULU    Y,X,A,B,CC              ; restore the registers
 lcpDrawChar         FCB     0
 lcpFieldEndAddr     FDB     0
 *******************************************************************************
+CheckForLines       PSHU    A,B,X,Y,CC
+                    CLR     HasLines
+                    LDX     #Field
+cflCheckLine        LDB     #FieldWidth-2
+cflLoop0            LDA     B,X
+                    CMPA    #ChSpc
+                    BEQ     cflNextLine
+                    DECB
+                    BNE     cflLoop0
+clfDrawLine         INC     HasLines
+                    LDB     #FieldWidth-2
+                    LDA     #ChLine
+cflLoop1            STA     B,X
+                    DECB
+                    BNE     cflLoop1
+cflNextLine         LEAX    FieldWidth,X
+                    CMPX    #FieldBottom
+                    BLT     cflCheckLine
+                    PULU    A,B,X,Y,CC
+                    RTS
+*******************************************************************************
+RemoveLines         PSHU    A,B,X,Y,CC
+                    PULU    A,B,X,Y,CC
+                    RTS
+*******************************************************************************
 SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
 LoopSaveVRAM        LDA     ,Y+             ; Load in A the real video byte
@@ -399,6 +433,7 @@ POLCAT	            EQU	    $A000	                ; read keyboard ROM routine
 ChSpc               EQU     128+(16*0)+15
 ChFieldLeft         EQU     128+(16*0)+10
 ChFieldRight        EQU     128+(16*0)+5
+ChLine              EQU     61
 SleepTime           EQU     $FF
 KeyUp		        EQU	    $5E		                ; UP key
 KeyDown		        EQU 	$0A		                ; DOWN key
@@ -406,6 +441,7 @@ KeyLeft             EQU     $08
 KeyRight            EQU     $09
 KeyEscape           EQU     $03                     ; Break
 KeySpace            EQU     $20
+
 *******************************************************************************
 Score               FDB     0
 CurrentX            FDB     0
@@ -422,12 +458,8 @@ DoesPieceFitY       FCB     0
 DoesPieceFitR       FCB     0
 PieceFitFlag        FCB     0
 QuitGame            FCB     0
-
+HasLines            FCB     0
 Falling             FCB     0
-Dividend            FDB     0
-Divisor             FCB     0
-Remainder           FCB     0
-*Quotient            FCB     0
 *******************************************************************************
 PiecesColor         FCB     128+15+(16*7)           ; color piece 1
                     FCB     128+15+16               ; color piece 2
