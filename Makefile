@@ -12,10 +12,10 @@ all: clean
 	decb copy -2 -b -r $(BIN) $(DSK),$(BIN)
 
 run: all
-	mame coco3 -window -flop1 $(DSK)
+	mame coco3 -window -nomax -flop1 $(DSK)
 
 debug: all
-	mame coco3 -window -debug -flop1 $(DSK)
+	mame coco3 -window -nomax -debug -flop1 $(DSK)
 
 copy: all
 	cp $(DSK) /Volumes/COCO3/

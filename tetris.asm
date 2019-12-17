@@ -20,7 +20,6 @@ NewPiece            CLR     ForceDown
                     LDA     PieceFitFlag
                     BEQ     EndGame
 
-
 MainLoop            LDA     HasToDraw
                     BEQ     doSleep                ; HasToDraw is 0, don't draw
                     JSR     DrawField
@@ -68,11 +67,9 @@ EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
 *******************************************************************************
 InitGame            PSHU    A,B,CC
                     CLR     QuitGame
-                    LDD     $112                    ; timer value
-                    STD     Seed
                     CLR     Score
                     CLR     SpeedCount
-                    LDA     20
+                    LDA     #$FF
                     STA     Speed
                     JSR     InitField
                     PULU    A,B,CC
@@ -103,7 +100,7 @@ _DoesPieceFitCK     MACRO
                     STA     DoesPieceFitR
                     JSR     DoesPieceFit
                     LDA     PieceFitFlag
-                    BEQ     endCheckKeyboard
+                    LBEQ    endCheckKeyboard
                     ENDM
 *******************************************************************************
 CheckKeyboard       CMPA    #KeyLeft                ; left
@@ -112,8 +109,10 @@ CheckKeyboard       CMPA    #KeyLeft                ; left
                     BEQ     PressRight
                     CMPA    #KeyUp                  ; Up
                     BEQ     PressUp
+                    CMPA    #KeyDown                  ; Down
+                    LBEQ    PressDown
                     CMPA    #KeySpace               ; Spacebar
-                    BEQ     PressSpc
+                    LBEQ    PressSpc
                     CMPA    #KeyEscape              ; Break     TODO does not exit
                     LBEQ    PressBrk
                     JMP     endCheckKeyboard         ; ignore other keys
@@ -146,43 +145,38 @@ pressUpEnd          STA     DoesPieceFitR
                     STA     CurrentRotation
                     INC     HasToDraw
                     JMP     endCheckKeyboard
+PressDown           LDD     CurrentX
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    INCA
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     endCheckKeyboard
+                    INC     CurrentY
+                    INC     HasToDraw
+                    JMP     endCheckKeyboard
 PressSpc            INC     Falling
-                ; LDD     #FallSleepTime
-                ;    STD     SleepTime
                     JMP     endCheckKeyboard
 PressBrk            INC     QuitGame
 endCheckKeyboard    RTS
 *******************************************************************************
 GetNextPiece        PSHU    A,B,CC
                     CLR     Falling
-                    LDD     #RegSleepTime           ; reset sleep time
-                    STD     SleepTime
                     LDA     NextPiece
                     STA     CurrentPiece
                     INC     HasToDraw
                     LDD     #(FieldWidth/2)-2
                     STD     CurrentX
                     CLR     CurrentY
-                    JSR     Random                  ; Random number in D
-                    ;ANDA    #%01 111111              ; no negative number TODO better solution than CLRA
-                    CLRA
-                    STD     Dividend
-                    LDA     #7                      ; 7 different pieces
-                    STA     Divisor
-                    LDA     #8                      ; do division
-                    STA     Remainder
-                    LDD     Dividend
-gnpDivide           ASLB
-                    ROLA
-                    CMPA    Divisor
-                    BCS     gnpCheckCount
-                    SUBA    Divisor
-                    INCB
-gnpCheckCount       DEC     Remainder
-                    BNE     gnpDivide
-                    ;STA     Remainder
-                    ;STB     Quotient
-                    STA     NextPiece
+                    LDD     #7                      ; random number from 1 to 7
+                    JSR     $B4F4                   ;copy D into FPAC 1
+                    JSR     $BF1F                   ;generate a random number
+                    JSR     $B3ED                   ;retrieve FPAC 1; D= your random number
+                    DECB                            ; dec 1 because number is between 1 and 7
+                    STB     NextPiece
                     PULU    A,B,CC
                     RTS
 *******************************************************************************
@@ -293,11 +287,11 @@ diLoop2             LDA     ,X+                     ; Load in A the byte to disp
                     BNE     diLoop1                 ; Loop if more to display
                     RTS
 *******************************************************************************
-Sleep               PSHU    X,CC
-                    LDX     SleepTime
-sleepLoop           LEAX    -1,X
+Sleep               PSHU    A,CC
+                    LDA     #SleepTime
+sleepLoop           DECA
                     BNE     sleepLoop
-                    PULU    X,CC
+                    PULU    A,CC
                     RTS
 *******************************************************************************
 DoesPieceFit        PSHU    Y,X,A,B,CC
@@ -381,29 +375,6 @@ lcpEnd              PULU    Y,X,A,B,CC              ; restore the registers
                     RTS
 lcpDrawChar         FCB     0
 lcpFieldEndAddr     FDB     0
-
-*******************************************************************************
-* From 6809 Machine Code Programming (David Barrow).pdf p.34
-Random              PSHS    D
-                    LDD     Seed
-                    ASLB
-                    ROLA
-                    ADDD    ,S
-                    STD     ,S                      ;5, (S) = 3R
-                    ASLB                            ;2,
-                    ROLA                            ;2, D = 2 * 3R
-                    PSHS    B                       ;6, (S) = 2 • 256 * 3R (hibyte)
-                    ASLB                            ;2,
-                    ROLA                            ;2, D = 4 * 3R
-                    ASLB                            ;2,
-                    ROLA                            ;2, D = 8 * 3R
-                    ADDD    1,S                     ;7, D = 9 * 3R
-                    STD     1,S                     ;6, (S+I) = 3 *3 * 3R
-                    PULS    A                       ;6,
-                    LDB     #41                     ;2, D = 2 • 256 • 3 R + 41
-                    SUBD    ,S++
-                    STD     Seed
-                    RTS                             ;5, exit, D = new R.
 *******************************************************************************
 SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
@@ -428,8 +399,7 @@ POLCAT	            EQU	    $A000	                ; read keyboard ROM routine
 ChSpc               EQU     128+(16*0)+15
 ChFieldLeft         EQU     128+(16*0)+10
 ChFieldRight        EQU     128+(16*0)+5
-RegSleepTime        EQU     200
-FallSleepTime       EQU     1
+SleepTime           EQU     $FF
 KeyUp		        EQU	    $5E		                ; UP key
 KeyDown		        EQU 	$0A		                ; DOWN key
 KeyLeft             EQU     $08
@@ -447,7 +417,6 @@ ForceDown           FCB     0
 Speed               FCB     0
 SpeedCount          FCB     0
 HasToDraw           FCB     0
-SleepTime           FDB     0
 DoesPieceFitX       FDB     0
 DoesPieceFitY       FCB     0
 DoesPieceFitR       FCB     0
@@ -455,11 +424,10 @@ PieceFitFlag        FCB     0
 QuitGame            FCB     0
 
 Falling             FCB     0
-Seed                FDB     0
 Dividend            FDB     0
 Divisor             FCB     0
 Remainder           FCB     0
-Quotient            FCB     0
+*Quotient            FCB     0
 *******************************************************************************
 PiecesColor         FCB     128+15+(16*7)           ; color piece 1
                     FCB     128+15+16               ; color piece 2
@@ -500,7 +468,6 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /.....X...XXX..../      ; rotation 1
                     FCC     /.....XX..X...X../      ; rotation 2
                     FCC     /....XXX...X...../      ; rotation 3
-* TODO: rmb and set it up in init game instead
 Field               RMB     FieldWidth*16
 FieldBottom         FCC     /############/
 Info                FCC     /``````````````````````SCOREz``````````````````````````````````NEXT`PIECEz```````/
