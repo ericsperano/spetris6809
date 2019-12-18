@@ -76,7 +76,12 @@ loopSleep           JSR     Sleep
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
 *******************************************************************************
-InitGame            PSHU    A,B,CC
+InitGame            PSHS    A,B,X,CC
+                    LDA     #$20
+                    LDX     #VideoRAM
+loopClrScrn         STA     ,X+
+                    CMPX    #EndVideoRAM
+                    BNE     loopClrScrn
                     CLR     QuitGame
                     CLR     Score
                     CLR     SpeedCount
@@ -87,7 +92,7 @@ InitGame            PSHU    A,B,CC
                     LDD     $112                    ; timer value
                     JSR     $B4F4                   ; put TIMER into FPAC 1 for max value
                     JSR     $BF1F                   ; generate a random number
-                    PULU    A,B,CC
+                    PULS    A,B,X,CC
                     RTS
 *******************************************************************************
 InitField           PSHU    A,Y,CC
@@ -259,7 +264,7 @@ dnpLoopRow0         LDB     #4                      ; 4 "pixels' per row
 dnpLoopRow1         LDA     ,X+
                     CMPA    #Dot
                     BNE     dnpDraw                 ; not a dot, we draw it on screen then
-                    LDA     ClearBlock
+                    LDA     #ChSpc
                     JMP     dnpEndDraw
 dnpDraw             LDA     dnpDrawChar             ; the char to draw, from the stack
 dnpEndDraw          STA     ,Y+
@@ -283,7 +288,7 @@ dfLoop2             LDA     ,X+                     ; Load in A the byte to disp
                     DECB                            ; Decrement counter of chars to display
                     BNE     dfLoop2                 ; Loop if more to display for this row
                     LEAY    32-FieldWidth,Y
-                    CMPY    #$600                   ; End of video ram?
+                    CMPY    #EndVideoRAM                   ; End of video ram?
                     BNE     dfLoop1                 ; Loop if more to display
                     PULU    A,B,X,Y,CC
                     RTS
@@ -445,7 +450,7 @@ SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
 LoopSaveVRAM        LDA     ,Y+             ; Load in A the real video byte
                     STA     ,X+             ; And store it in the saved buffer
-                    CMPY    #$600           ; At the end of the video ram?
+                    CMPY    #EndVideoRAM           ; At the end of the video ram?
                     BNE     LoopSaveVRAM
                     RTS
 *******************************************************************************
@@ -453,18 +458,19 @@ RestoreVideoRAM     LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
 loopRestoreVRAM     LDA     ,X+             ; Load in A the saved video byte
                     STA     ,Y+             ; And put in in real video ram
-                    CMPY    #$600           ; At the end of the video ram?
+                    CMPY    #EndVideoRAM            ; At the end of the video ram?
                     BNE     loopRestoreVRAM
                     RTS
 *******************************************************************************
 FieldWidth          EQU     12
 Dot                 EQU     $2E
 VideoRAM            EQU     $400                    ; video ram address
+EndVideoRAM         EQU     $600
 POLCAT	            EQU	    $A000	                ; read keyboard ROM routine
-ChSpc               EQU     128+(16*0)+15
-ChFieldLeft         EQU     128+(16*0)+10
-ChFieldRight        EQU     128+(16*0)+5
-ChLine              EQU     125
+ChSpc               EQU     128 ;+(16*0)+15
+ChFieldLeft         EQU     128+(16*0)+5
+ChFieldRight        EQU     128+(16*0)+10
+ChLine              EQU     61
 SleepTime           EQU     $FF
 KeyUp		        EQU	    $5E		                ; UP key
 KeyDown		        EQU 	$0A		                ; DOWN key
@@ -499,7 +505,6 @@ PiecesColor         FCB     128+15+(16*7)           ; color piece 1
                     FCB     128+15+(16*4)           ; Color piece 5
                     FCB     128+15+(16*5)           ; Color piece 6
                     FCB     128+15+(16*6)           ; Color piece 7
-ClearBlock          FCB     128+15                  ; clear
 
 PieceLen            EQU     16
 PieceStructLen      EQU     4*PieceLen              ; 4 different rotations
@@ -533,11 +538,15 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /....XXX...X...../      ; rotation 3
 Field               RMB     FieldWidth*16
 FieldBottom         FCC     /############/
-Info                FCC     /``````````````````````SCOREz``````````````````````````````````NEXT`PIECEz```````/
-                    FCC     /````````````````````````````````````````````````````````````````````````````````/
-                    FCC     /````````````````````````````````````````````````````````````````````````````````/
-                    FCC     /``````````````````````````````````````````/
+Info                FCC     /                       /
+                    FDB     $1303
+                    FDB     $0f12
+                    FCB     $05
+                    FCC     /:                                  NEXT PIECE:       /
+                    FCC     /                                                                                /
+                    FCC     /                                                                                /
+                    FCC     /                                          /
                     FCB     $5E
-                    FCC     /z`ROTATE`````````````````````````````/
+                    FCC     /: ROTATE                             /
 VideoRAMBuffer      RMB     32*16
                     END     Start
