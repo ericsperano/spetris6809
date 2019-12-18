@@ -92,6 +92,8 @@ loopClrScrn         STA     ,X+
                     LDD     $112                    ; timer value
                     JSR     $B4F4                   ; put TIMER into FPAC 1 for max value
                     JSR     $BF1F                   ; generate a random number
+                    JSR     $B3ED                   ;retrieve FPAC 1; D= your random number
+                    STB     $118                    ; seed location
                     PULS    A,B,X,CC
                     RTS
 *******************************************************************************
@@ -246,15 +248,7 @@ DrawNextPiece       PSHU    A,B,X,Y,CC
                     LDA     NextPiece                ; by indexing PiecesColor
                     LDA     A,X
                     STA     dnpDrawChar             ; the char used to draw
-                    LDA     #32                     ; 32 cols per line
-                    LDB     #5                      ; y position
-                    MUL
-                    * TODO no need to compute video ram, could be EQUs
-                    ADDD    #(FieldWidth+2)         ; add x position
-                    ADDD    #VideoRAM               ; add base pointer
-                    TFR     D,Y                     ; Y == video memory where we start to draw
-                    ADDD    #(3*32)+4               ; where we stop to draw
-                    STD     dnpDrawEndAddr
+                    LDY     #NextPieceVRAM
                     LDA     NextPiece               ; compute the offset in the pieces struct array
                     LDB     #PieceStructLen
                     MUL
@@ -270,14 +264,13 @@ dnpDraw             LDA     dnpDrawChar             ; the char to draw, from the
 dnpEndDraw          STA     ,Y+
                     DECB
                     BNE     dnpLoopRow1
-                    CMPY    dnpDrawEndAddr          ; are we done drawing?
+                    CMPY    #NextPieceEndVRAM          ; are we done drawing?
                     BGE     dnpEnd
                     LEAY    28,Y                    ; move at the beginning of next line on video ram (32-width=28)
                     JMP     dnpLoopRow0
 dnpEnd              PULU    A,B,X,Y,CC              ; restore the registers
                     RTS
 dnpDrawChar         FCB     0
-dnpDrawEndAddr      FDB     0
 *******************************************************************************
 DrawField           PSHU    A,B,X,Y,CC
                     LDY     #VideoRAM               ; Y points to the real video ram
@@ -293,18 +286,12 @@ dfLoop2             LDA     ,X+                     ; Load in A the byte to disp
                     PULU    A,B,X,Y,CC
                     RTS
 *******************************************************************************
-DrawInfo            LDY     #(VideoRAM+FieldWidth)  ; Y points to the real video ram
-                    LDX     #Info                   ; X points to the intro text
-diLoop1             LDB     #(32-FieldWidth)
-diLoop2             LDA     ,X+                     ; Load in A the byte to display
-                    STA     ,Y+                     ; Put A in video ram
-                    DECB                            ; Decrement counter of chars to display
-                    BNE     diLoop2                 ; Loop if more to display for this row
-                    TFR     Y,D
-                    ADDD    #FieldWidth
-                    TFR     D,Y
-                    CMPY    #$60C                   ; End of video ram?
-                    BNE     diLoop1                 ; Loop if more to display
+DrawInfo            LDX     #ScoreLabel
+                    LDY     #ScoreLabelVRAM
+                    JSR     PrintString
+                    LDX     #NextPieceLabel
+                    LDY     #NextPieceLabelVRAM
+                    JSR     PrintString
                     RTS
 *******************************************************************************
 Sleep               PSHU    A,CC
@@ -443,8 +430,24 @@ mlLoop1             LDA     B,Y
                     JMP     mlLoop0
 endMoveLines        PULS    X
                     RTS
-
-
+*******************************************************************************
+* Print (non-inverted) string
+* ---------------------------
+* It substracts 64 to every char to display in non-inverted mode,
+* which means the end of line char is 64
+*
+* X:    Address of the string to display
+* Y:    Video Address where it should be display
+*
+* Both X & Y are restored on return
+PrintString         PSHS    X,Y,CC
+loopPrintString     LDA     ,X+
+                    ANDA    #%00111111
+                    BEQ     endPrintString
+                    STA     ,Y+
+                    JMP     loopPrintString
+endPrintString      PULS    X,Y,CC
+                    RTS
 *******************************************************************************
 SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
@@ -505,7 +508,6 @@ PiecesColor         FCB     128+15+(16*7)           ; color piece 1
                     FCB     128+15+(16*4)           ; Color piece 5
                     FCB     128+15+(16*5)           ; Color piece 6
                     FCB     128+15+(16*6)           ; Color piece 7
-
 PieceLen            EQU     16
 PieceStructLen      EQU     4*PieceLen              ; 4 different rotations
 Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
@@ -536,17 +538,14 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /.....X...XXX..../      ; rotation 1
                     FCC     /.....XX..X...X../      ; rotation 2
                     FCC     /....XXX...X...../      ; rotation 3
+ScoreLabel          FCC     /SCORE:@/
+ScoreLabelVRAM      EQU     VideoRAM+FieldWidth+2
+NextPieceLabel      FCC     /NEXT PIECE:@/
+NextPieceLabelVRAM  EQU     VideoRAM+(32*2)+FieldWidth+2
+NextPieceVRAM       EQU     VideoRAM+(32*4)+FieldWidth+2
+NextPieceEndVRAM    EQU     VideoRAM+(32*8)+FieldWidth+6
+
 Field               RMB     FieldWidth*16
 FieldBottom         FCC     /############/
-Info                FCC     /                       /
-                    FDB     $1303
-                    FDB     $0f12
-                    FCB     $05
-                    FCC     /:                                  NEXT PIECE:       /
-                    FCC     /                                                                                /
-                    FCC     /                                                                                /
-                    FCC     /                                          /
-                    FCB     $5E
-                    FCC     /: ROTATE                             /
 VideoRAMBuffer      RMB     32*16
                     END     Start
