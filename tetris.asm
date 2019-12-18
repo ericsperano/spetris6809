@@ -66,8 +66,10 @@ lockPiece           JSR     LockCurrentPiece
                     LDA     HasLines
                     LBEQ    NewPiece                ; no lines
                     JSR     DrawField
-                    ; sleep
-                    JSR     Sleep
+                    LDB     #$ff
+loopSleep           JSR     Sleep
+                    DECB
+                    BNE     loopSleep
                     JSR     RemoveLines
 
                     JMP     NewPiece
@@ -416,13 +418,14 @@ rlLoop0             LDA     1,X
                     CMPA    #ChLine
                     BNE     rl2
                     JSR     moveLines
+                    JMP     rlLoop0
 rl2                 LEAX    -FieldWidth,X
                     CMPX    #Field
                     BGE     rlLoop0
 endRemoveLines      PULU    A,B,X,Y,CC
                     RTS
 
-moveLines           PSHU    X
+moveLines           PSHS    X
 mlLoop0             CMPX    #Field
                     BEQ     endMoveLines
                     LEAY    -FieldWidth,X
@@ -433,7 +436,7 @@ mlLoop1             LDA     B,Y
                     BNE     mlLoop1
                     TFR     Y,X
                     JMP     mlLoop0
-endMoveLines        PULU    X
+endMoveLines        PULS    X
                     RTS
 
 
@@ -461,7 +464,7 @@ POLCAT	            EQU	    $A000	                ; read keyboard ROM routine
 ChSpc               EQU     128+(16*0)+15
 ChFieldLeft         EQU     128+(16*0)+10
 ChFieldRight        EQU     128+(16*0)+5
-ChLine              EQU     61
+ChLine              EQU     125
 SleepTime           EQU     $FF
 KeyUp		        EQU	    $5E		                ; UP key
 KeyDown		        EQU 	$0A		                ; DOWN key
