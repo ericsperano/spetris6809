@@ -411,8 +411,32 @@ cflNextLine         LEAX    FieldWidth,X
                     RTS
 *******************************************************************************
 RemoveLines         PSHU    A,B,X,Y,CC
-                    PULU    A,B,X,Y,CC
+                    LDX     #FieldBottom-FieldWidth
+rlLoop0             LDA     1,X
+                    CMPA    #ChLine
+                    BNE     rl2
+                    JSR     moveLines
+rl2                 LEAX    -FieldWidth,X
+                    CMPX    #Field
+                    BGE     rlLoop0
+endRemoveLines      PULU    A,B,X,Y,CC
                     RTS
+
+moveLines           PSHU    X
+mlLoop0             CMPX    #Field
+                    BEQ     endMoveLines
+                    LEAY    -FieldWidth,X
+                    LDB     #FieldWidth-2
+mlLoop1             LDA     B,Y
+                    STA     B,X
+                    DECB
+                    BNE     mlLoop1
+                    TFR     Y,X
+                    JMP     mlLoop0
+endMoveLines        PULU    X
+                    RTS
+
+
 *******************************************************************************
 SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
