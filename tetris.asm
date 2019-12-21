@@ -3,7 +3,8 @@
 * TODO PieceCount to increment speed
 *******************************************************************************
                     ORG     $3F00
-Start               JSR     SaveVideoRAM            ; save video ram to restore on exit
+Start               LDU     #UserStack
+                    JSR     SaveVideoRAM            ; save video ram to restore on exit
                     JSR     InitGame
                     JSR     DrawInfo
                     JSR     GetNextPiece
@@ -77,14 +78,16 @@ loopSleep           JSR     Sleep
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
 *******************************************************************************
-InitGame            PSHS    A,B,X,CC
+InitGame            PSHU    A,B,X,CC
                     LDA     #$20
                     LDX     #VideoRAM
 loopClrScrn         STA     ,X+
                     CMPX    #EndVideoRAM
                     BNE     loopClrScrn
                     CLR     QuitGame
-                    CLR     Score
+                    LDD     #0
+                    STD     Score
+                    JSR     GetScoreStr
                     CLR     SpeedCount
                     LDA     #$FF
                     STA     Speed
@@ -95,7 +98,7 @@ loopClrScrn         STA     ,X+
                     JSR     $BF1F                   ; generate a random number
                     JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
                     STB     $118                    ; seed location
-                    PULS    A,B,X,CC
+                    PULU    A,B,X,CC
                     RTS
 *******************************************************************************
 InitField           PSHU    A,Y,CC
@@ -406,7 +409,6 @@ cflLoop0            LDA     B,X
                     LDD     Score
                     ADDD    #1
                     STD     Score
-                    LDX     #ScoreStr
                     JSR     GetScoreStr
                     LDB     #FieldWidth-2
                     LDA     #ChLine
@@ -455,13 +457,13 @@ endMoveLines        PULS    X
 * Y:    Video Address where it should be display
 *
 * Both X & Y are restored on return
-PrintString         PSHS    X,Y,CC
+PrintString         PSHU    X,Y,CC
 loopPrintString     LDA     ,X+
                     ANDA    #%00111111
                     BEQ     endPrintString
                     STA     ,Y+
                     JMP     loopPrintString
-endPrintString      PULS    X,Y,CC
+endPrintString      PULU    X,Y,CC
                     RTS
 *******************************************************************************
 **
@@ -470,9 +472,10 @@ endPrintString      PULS    X,Y,CC
 *    D=NUMBER
 *    X=STRING
 **
-GetScoreStr 		PSHU	X,Y,A,B,CC
+GetScoreStr 		PSHS	X,Y,A,B,CC      ;TODO why doesnt work with pshsu  ???
+                    LDX     #ScoreStr
                     JSR		ITOA003
-			        PULU	X,Y,A,B,CC
+			        PULS	X,Y,A,B,CC
 			        RTS
 ITOA003		        LDY 	#10000
 			        JSR		ITOA000
@@ -605,4 +608,5 @@ NextPieceEndVRAM    EQU     VideoRAM+(32*8)+FieldWidth+6
 Field               RMB     FieldWidth*16
 FieldBottom         FCC     /############/
 VideoRAMBuffer      RMB     32*16
+UserStack           EQU     *
                     END     Start
