@@ -25,6 +25,7 @@ MainLoop            LDA     HasToDraw
                     BEQ     doSleep                ; HasToDraw is 0, don't draw
                     JSR     DrawField
                     JSR     DrawCurrentPiece
+                    JSR     DisplayScore
                     CLR     HasToDraw
 doSleep             LDA     Falling                 ; skip the sleeping andd stuff if the piece is falling
                     BEQ     doSleep_
@@ -90,9 +91,9 @@ loopClrScrn         STA     ,X+
                     JSR     InitField
                     ; randomize seed
                     LDD     $112                    ; timer value
-                    JSR     $B4F4                   ; put TIMER into FPAC 1 for max value
+                    JSR     $B4F4                   ; put TIMER into FPAC 0 for max value
                     JSR     $BF1F                   ; generate a random number
-                    JSR     $B3ED                   ;retrieve FPAC 1; D= your random number
+                    JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
                     STB     $118                    ; seed location
                     PULS    A,B,X,CC
                     RTS
@@ -194,9 +195,9 @@ GetNextPiece        PSHU    A,B,CC
                     STD     CurrentX
                     CLR     CurrentY
                     LDD     #7                      ; random number from 1 to 7
-                    JSR     $B4F4                   ;copy D into FPAC 1 (Floating point accumulator)
+                    JSR     $B4F4                   ;copy D into FPAC 0 (Floating point accumulator)
                     JSR     $BF1F                   ;generate a random number
-                    JSR     $B3ED                   ;retrieve FPAC 1; D= your random number
+                    JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
                     DECB                            ; dec 1 because number is between 1 and 7
                     STB     NextPiece
                     PULU    A,B,CC
@@ -292,6 +293,15 @@ DrawInfo            LDX     #ScoreLabel
                     LDX     #NextPieceLabel
                     LDY     #NextPieceLabelVRAM
                     JSR     PrintString
+                    RTS
+*******************************************************************************
+DisplayScore        LDX     #ScoreStr
+                    LDY     #ScoreVRAM
+                    LDB     #5
+lpDisplayScore      LDA     ,X+
+                    STA     ,Y+
+                    DECB
+                    BNE     lpDisplayScore
                     RTS
 *******************************************************************************
 Sleep               PSHU    A,CC
@@ -392,7 +402,12 @@ cflLoop0            LDA     B,X
                     BEQ     cflNextLine
                     DECB
                     BNE     cflLoop0
-clfDrawLine         INC     HasLines
+                    INC     HasLines
+                    LDD     Score
+                    ADDD    #1
+                    STD     Score
+                    LDX     #ScoreStr
+                    JSR     GetScoreStr
                     LDB     #FieldWidth-2
                     LDA     #ChLine
 cflLoop1            STA     B,X
@@ -449,6 +464,46 @@ loopPrintString     LDA     ,X+
 endPrintString      PULS    X,Y,CC
                     RTS
 *******************************************************************************
+**
+*  ITOA
+*    Stolen and adapted from Coco SDC-Explorer :)
+*    D=NUMBER
+*    X=STRING
+**
+GetScoreStr 		PSHU	X,Y,A,B,CC
+                    JSR		ITOA003
+			        PULU	X,Y,A,B,CC
+			        RTS
+ITOA003		        LDY 	#10000
+			        JSR		ITOA000
+			        LDY 	#1000
+			        JSR		ITOA000
+ITOA004		        LDY		#100
+			        JSR		ITOA000
+			        LDY		#10
+			        JSR		ITOA000
+			        LDY		#1
+ITOA000	        	STD		NUMBER
+			        STY		DIGIT
+			        LDA		#'0'
+			        STA		,X
+ITOA001		        LDD		NUMBER
+			        SUBD	DIGIT
+			        BCS		ITOA002
+			        STD		NUMBER
+			LDA		,X
+			INCA
+			STA		,X
+			JMP		ITOA001
+ITOA002		CLRA
+			LEAX	1,X
+			STA		,X
+			LDD 	NUMBER
+			RTS
+NUMBER		FDB		0
+DIGIT		FDB		0
+
+*******************************************************************************
 SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
                     LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
 LoopSaveVRAM        LDA     ,Y+             ; Load in A the real video byte
@@ -484,6 +539,7 @@ KeySpace            EQU     $20
 
 *******************************************************************************
 Score               FDB     0
+ScoreStr            RMB     16
 CurrentX            FDB     0
 CurrentY            FCB     0
 CurrentPiece        FCB     0
@@ -540,6 +596,7 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /....XXX...X...../      ; rotation 3
 ScoreLabel          FCC     /SCORE:@/
 ScoreLabelVRAM      EQU     VideoRAM+FieldWidth+2
+ScoreVRAM           EQU     VideoRAM+FieldWidth+2+7
 NextPieceLabel      FCC     /NEXT PIECE:@/
 NextPieceLabelVRAM  EQU     VideoRAM+(32*2)+FieldWidth+2
 NextPieceVRAM       EQU     VideoRAM+(32*4)+FieldWidth+2
