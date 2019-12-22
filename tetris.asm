@@ -78,6 +78,7 @@ loopSleep           JSR     Sleep
 EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
                     RTS
 *******************************************************************************
+* TODO U pointer gets modified here somewhere, it shouldnt
 InitGame            PSHU    A,B,X,CC
                     LDA     #$20
                     LDX     #VideoRAM
@@ -95,13 +96,15 @@ loopClrScrn         STA     ,X+
                     ; randomize seed
                     LDD     $112                    ; timer value
                     JSR     $B4F4                   ; put TIMER into FPAC 0 for max value
-                    JSR     $BF1F                   ; generate a random number
+                    PSHS    U
+                    JSR     $BF1F                   ; generate a random number THIS MODIFIES U!!!
+                    PULS    U
                     JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
                     STB     $118                    ; seed location
                     PULU    A,B,X,CC
                     RTS
 *******************************************************************************
-InitField           PSHU    A,Y,CC
+InitField           PSHS    A,Y,CC
                     LDY     #Field
                     LDA     #ChSpc
 ifLoopClear         STA     ,Y+
@@ -115,7 +118,7 @@ ifLoop0             LDA     #ChFieldLeft
                     LEAY    FieldWidth,Y
                     CMPY    #FieldBottom
                     BNE     ifLoop0
-                    PULU    A,Y,CC
+                    PULS    A,Y,CC
                     RTS
 *******************************************************************************
 _DoesPieceFitCK     MACRO
