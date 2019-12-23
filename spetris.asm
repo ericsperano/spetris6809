@@ -1,126 +1,219 @@
-*******************************************************************************
-* Tetris for my Color Computer 3                                              *
+***********************************************************************************************************************
+* Spétris                                                                                                             *
+* Tetris Clone for my Color Computer 3                                                                                *
 * TODO PieceCount to increment speed
-*******************************************************************************
-                    ORG     $3F00
-Start               LDU     #UserStack
-                    JSR     SaveVideoRAM            ; save video ram to restore on exit
-                    JSR     InitGame
-                    JSR     DrawInfo
-                    JSR     GetNextPiece
-NewPiece            CLR     ForceDown
-                    JSR     GetNextPiece
-                    JSR     DrawNextPiece
+***********************************************************************************************************************
+                ORG     $3F00
+Start           LDU     #UserStack
+                JSR     SaveVideoRAM            ; save video ram to restore on exit
+                JSR     NewGame
 
-                    LDD     CurrentX                ; first check if it would fit
-                    STD     DoesPieceFitX
-                    LDA     CurrentY
-                    STA     DoesPieceFitY
-                    LDA     CurrentRotation
-                    STA     DoesPieceFitR
-                    JSR     DoesPieceFit
-                    LDA     PieceFitFlag
-                    LBEQ    EndGame
+*-----------------------------------------------------------------------------------------------------------------------
+*                    JSR     DrawInfo
+*                    JSR     GetNextPiece
+*NewPiece            CLR     ForceDown
+*                    JSR     GetNextPiece
+*                    JSR     DrawNextPiece
+*                    LDD     CurrentX                   ; first check if it would fit
+*                    STD     DoesPieceFitX
+*                    LDA     CurrentY
+*                    STA     DoesPieceFitY
+*                    LDA     CurrentRotation
+*                    STA     DoesPieceFitR
+*                    JSR     DoesPieceFit
+*                    LDA     PieceFitFlag
+*                    LBEQ    EndGame
+*MainLoop            LDA     HasToDraw
+*                    BEQ     doSleep                    ; HasToDraw is 0, don't draw
+*                    JSR     DrawField
+*                    JSR     DrawCurrentPiece
+*                    JSR     DisplayScore
+*                    CLR     HasToDraw
+*doSleep             LDA     Falling                    ; skip the sleeping andd stuff if the piece is falling
+*                    BEQ     doSleep_
+*                    INC     ForceDown
+*                    INC     HasToDraw
+*doSleep_            JSR     Sleep                   ; increment the speed count
+*                    INC     SpeedCount
+*                    LDA     SpeedCount              ; and force down if it reached speed max
+*                    CMPA    Speed
+*                    BNE     pollKeyboard           ; if not go straight to poll keyboard
+*                    INC     ForceDown
+*                    INC     HasToDraw
+*                    CLR     SpeedCount
+*pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
+*                    BEQ     chkForceDown            ; No key pressed
+*                    JSR     CheckKeyboard
+*                    LDA     QuitGame
+*                    BNE     EndGame                 ; quit game if QuitGame is 1
+*chkForceDown        LDA     ForceDown
+*                    BEQ     MainLoop                ; force down is 0, don't increment y
+*                    LDD     CurrentX                ; first check if it would fit
+*                    STD     DoesPieceFitX
+*                    LDA     CurrentY
+*                    INCA
+*                    STA     DoesPieceFitY
+*                    LDA     CurrentRotation
+*                    STA     DoesPieceFitR
+*                    JSR     DoesPieceFit
+*                    LDA     PieceFitFlag
+*                    BEQ     lockPiece               ; it doesnt, we lock*
+*
+*                    LDA     DoesPieceFitY           ; it does, increment y
+*                    STA     CurrentY
+*                    CLR     ForceDown
+*                    JMP     MainLoop
+*lockPiece           JSR     LockCurrentPiece
+*                    JSR     CheckForLines
+*                    LDA     HasLines
+*                    LBEQ    NewPiece                ; no lines
+*                    JSR     DrawField
+*                    LDB     #$ff
+*loopSleep           JSR     Sleep
+*                    DECB
+*                    BNE     loopSleep
+*                    JSR     RemoveLines
+*
+*                    JMP     NewPiece
+EndGame         JSR     RestoreVideoRAM               ; Cleanup and end execution
+                RTS
+***********************************************************************************************************************
+* SaveVideoRam:                                                                                                       *
+***********************************************************************************************************************
+SaveVideoRAM    LDY     #VideoRAM               ; Y points to the real video ram
+                LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
+LoopSaveVRAM    LDA     ,Y+                     ; Load in A the real video byte
+                STA     ,X+                     ; And store it in the saved buffer
+                CMPY    #EndVideoRAM            ; At the end of the video ram?
+                BNE     LoopSaveVRAM
+                RTS
+VideoRAMBuffer  RMB     32*16
+***********************************************************************************************************************
+* RestoreVideoRAM:                                                                                                    *
+***********************************************************************************************************************
+RestoreVideoRAM LDY     #VideoRAM               ; Y points to the real video ram
+                LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
+loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
+                STA     ,Y+                     ; And put in in real video ram
+                CMPY    #EndVideoRAM            ; At the end of the video ram?
+                BNE     loopRestoreVRAM
+                RTS
+***********************************************************************************************************************
+* New Game:                                                                                                           *
+***********************************************************************************************************************
+NewGame         PSHU    A,B,CC                  ; Save registers used in subroutine
+                JSR     ClearScreen             ; Start by clearin the screeb
+                JSR     RandomizeSeed           ; Randomize the seed with the current timer
+                CLR     QuitGame                ;
+                LDD     #0                      ; Reset score
+                STD     Score
+                JSR     GetScoreStr             ; Reset score string
+                CLR     SpeedCount
+                LDA     #$FF
+                STA     Speed
+                JSR     InitField
+                JSR     DrawField
+                PULU    A,B,CC                  ; Restore registers used in subroutine
+                RTS
+***********************************************************************************************************************
+* Clear Screen                                                                                                        *
+***********************************************************************************************************************
+ClearScreen     PSHU    A,X,CC
+                LDA     #$20
+                LDX     #VideoRAM
+loopClrScrn     STA     ,X+
+                CMPX    #EndVideoRAM
+                BNE     loopClrScrn
+                PULU    A,X,CC
+                RTS
+***********************************************************************************************************************
+* GetScoreStr: convert the integer Score into the string ScoreStr                                                                                                        *
+*    D=Score
+*    Stolen and adapted from Coco SDC-Explorer :)
+***********************************************************************************************************************
+GetScoreStr     PSHU	X,Y,A,B,CC              ;TODO why doesnt work with pshsu  ???
+                LDX     #ScoreStr
+                JSR	ITOA003
+		PULU    X,Y,A,B,CC
+		RTS
+ITOA003		LDY 	#10000
+	        JSR	ITOA000
+	        LDY 	#1000
+	        JSR	ITOA000
+ITOA004		LDY	#100
+		JSR	ITOA000
+		LDY	#10
+		JSR	ITOA000
+		LDY	#1
+ITOA000	        STD	NUMBER
+	        STY	DIGIT
+		LDA	#'0'
+		STA	,X
+ITOA001		LDD	NUMBER
+		SUBD	DIGIT
+		BCS	ITOA002
+		STD	NUMBER
+		LDA	,X
+		INCA
+		STA	,X
+		JMP	ITOA001
+ITOA002		CLRA
+		LEAX	1,X
+		STA	,X
+		LDD 	NUMBER
+        	RTS
+NUMBER		FDB	0
+DIGIT		FDB	0
+***********************************************************************************************************************
+* Init Field:                                                                                                         *
+***********************************************************************************************************************
+InitField       PSHU    A,Y,CC
+                LDY     #Field
+                LDA     #ChSpc
+ifLoopClear     STA     ,Y+
+                CMPY    #FieldBottom
+                BNE     ifLoopClear
+                LDY     #Field
+ifLoop0         LDA     #ChFieldLeft
+                STA     ,Y
+                LDA     #ChFieldRight
+                STA     (FieldWidth-1),Y
+                LEAY    FieldWidth,Y
+                CMPY    #FieldBottom
+                BNE     ifLoop0
+                PULU    A,Y,CC
+                RTS
+***********************************************************************************************************************
+* RandomizeSeed:                                                                                                      *
+***********************************************************************************************************************
+RandomizeSeed   PSHS    D,U
+                LDD     $112                    ; timer value
+                JSR     $B4F4                   ; put TIMER into FPAC 0 for max value
+                JSR     $BF1F                   ; generate a random number THIS MODIFIES U!!!
+                JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
+                STB     $118                    ; seed location
+                PULS    D,U
+                RTS
+***********************************************************************************************************************
+* DrawField:                                                                                                          *
+***********************************************************************************************************************
+DrawField       PSHU    A,B,X,Y,CC
+                LDY     #VideoRAM               ; Y points to the real video ram
+                LDX     #Field                  ; X points to the intro text
+dfLoop1         LDB     #FieldWidth
+dfLoop2         LDA     ,X+                     ; Load in A the byte to display
+                STA     ,Y+                     ; Put A in video ram
+                DECB                            ; Decrement counter of chars to display
+                BNE     dfLoop2                 ; Loop if more to display for this row
+                LEAY    32-FieldWidth,Y
+                CMPY    #EndVideoRAM            ; End of video ram?
+                BNE     dfLoop1                 ; Loop if more to display
+                PULU    A,B,X,Y,CC
+                RTS
 
-MainLoop            LDA     HasToDraw
-                    BEQ     doSleep                ; HasToDraw is 0, don't draw
-                    JSR     DrawField
-                    JSR     DrawCurrentPiece
-                    JSR     DisplayScore
-                    CLR     HasToDraw
-doSleep             LDA     Falling                 ; skip the sleeping andd stuff if the piece is falling
-                    BEQ     doSleep_
-                    INC     ForceDown
-                    INC     HasToDraw
-doSleep_            JSR     Sleep                   ; increment the speed count
-                    INC     SpeedCount
-                    LDA     SpeedCount              ; and force down if it reached speed max
-                    CMPA    Speed
-                    BNE     pollKeyboard           ; if not go straight to poll keyboard
-                    INC     ForceDown
-                    INC     HasToDraw
-                    CLR     SpeedCount
-pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
-                    BEQ     chkForceDown            ; No key pressed
-                    JSR     CheckKeyboard
-                    LDA     QuitGame
-                    BNE     EndGame                 ; quit game if QuitGame is 1
-chkForceDown        LDA     ForceDown
-                    BEQ     MainLoop                ; force down is 0, don't increment y
-                    LDD     CurrentX                ; first check if it would fit
-                    STD     DoesPieceFitX
-                    LDA     CurrentY
-                    INCA
-                    STA     DoesPieceFitY
-                    LDA     CurrentRotation
-                    STA     DoesPieceFitR
-                    JSR     DoesPieceFit
-                    LDA     PieceFitFlag
-                    BEQ     lockPiece               ; it doesnt, we lock
 
-                    LDA     DoesPieceFitY           ; it does, increment y
-                    STA     CurrentY
-                    CLR     ForceDown
-                    JMP     MainLoop
 
-lockPiece           JSR     LockCurrentPiece
-                    JSR     CheckForLines
-                    LDA     HasLines
-                    LBEQ    NewPiece                ; no lines
-                    JSR     DrawField
-                    LDB     #$ff
-loopSleep           JSR     Sleep
-                    DECB
-                    BNE     loopSleep
-                    JSR     RemoveLines
-
-                    JMP     NewPiece
-EndGame             JSR     RestoreVideoRAM         ; Cleanup and end execution
-                    RTS
-*******************************************************************************
-* TODO U pointer gets modified here somewhere, it shouldnt
-InitGame            PSHU    A,B,X,CC
-                    LDA     #$20
-                    LDX     #VideoRAM
-loopClrScrn         STA     ,X+
-                    CMPX    #EndVideoRAM
-                    BNE     loopClrScrn
-                    CLR     QuitGame
-                    LDD     #0
-                    STD     Score
-                    JSR     GetScoreStr
-                    CLR     SpeedCount
-                    LDA     #$FF
-                    STA     Speed
-                    JSR     InitField
-                    ; randomize seed
-                    LDD     $112                    ; timer value
-                    JSR     $B4F4                   ; put TIMER into FPAC 0 for max value
-                    PSHS    U
-                    JSR     $BF1F                   ; generate a random number THIS MODIFIES U!!!
-                    PULS    U
-                    JSR     $B3ED                   ;retrieve FPAC 0; D= your random number
-                    STB     $118                    ; seed location
-                    PULU    A,B,X,CC
-                    RTS
-*******************************************************************************
-InitField           PSHS    A,Y,CC
-                    LDY     #Field
-                    LDA     #ChSpc
-ifLoopClear         STA     ,Y+
-                    CMPY    #FieldBottom
-                    BNE     ifLoopClear
-                    LDY     #Field
-ifLoop0             LDA     #ChFieldLeft
-                    STA     ,Y
-                    LDA     #ChFieldRight
-                    STA     (FieldWidth-1),Y
-                    LEAY    FieldWidth,Y
-                    CMPY    #FieldBottom
-                    BNE     ifLoop0
-                    PULS    A,Y,CC
-                    RTS
-*******************************************************************************
+********************************************************************************
 _DoesPieceFitCK     MACRO
                     STD     DoesPieceFitX
                     LDA     CurrentY
@@ -278,20 +371,6 @@ dnpEndDraw          STA     ,Y+
 dnpEnd              PULU    A,B,X,Y,CC              ; restore the registers
                     RTS
 dnpDrawChar         FCB     0
-*******************************************************************************
-DrawField           PSHU    A,B,X,Y,CC
-                    LDY     #VideoRAM               ; Y points to the real video ram
-                    LDX     #Field                  ; X points to the intro text
-dfLoop1             LDB     #FieldWidth
-dfLoop2             LDA     ,X+                     ; Load in A the byte to display
-                    STA     ,Y+                     ; Put A in video ram
-                    DECB                            ; Decrement counter of chars to display
-                    BNE     dfLoop2                 ; Loop if more to display for this row
-                    LEAY    32-FieldWidth,Y
-                    CMPY    #EndVideoRAM                   ; End of video ram?
-                    BNE     dfLoop1                 ; Loop if more to display
-                    PULU    A,B,X,Y,CC
-                    RTS
 *******************************************************************************
 DrawInfo            LDX     #ScoreLabel
                     LDY     #ScoreLabelVRAM
@@ -468,65 +547,19 @@ loopPrintString     LDA     ,X+
                     JMP     loopPrintString
 endPrintString      PULU    X,Y,CC
                     RTS
-*******************************************************************************
-**
-*  ITOA
-*    Stolen and adapted from Coco SDC-Explorer :)
-*    D=NUMBER
-*    X=STRING
-**
-GetScoreStr 		PSHS	X,Y,A,B,CC      ;TODO why doesnt work with pshsu  ???
-                    LDX     #ScoreStr
-                    JSR		ITOA003
-			        PULS	X,Y,A,B,CC
-			        RTS
-ITOA003		        LDY 	#10000
-			        JSR		ITOA000
-			        LDY 	#1000
-			        JSR		ITOA000
-ITOA004		        LDY		#100
-			        JSR		ITOA000
-			        LDY		#10
-			        JSR		ITOA000
-			        LDY		#1
-ITOA000	        	STD		NUMBER
-			        STY		DIGIT
-			        LDA		#'0'
-			        STA		,X
-ITOA001		        LDD		NUMBER
-			        SUBD	DIGIT
-			        BCS		ITOA002
-			        STD		NUMBER
-			LDA		,X
-			INCA
-			STA		,X
-			JMP		ITOA001
-ITOA002		CLRA
-			LEAX	1,X
-			STA		,X
-			LDD 	NUMBER
-			RTS
-NUMBER		FDB		0
-DIGIT		FDB		0
+
+***********************************************************************************************************************
+***********************************************************************************************************************
+***********************************************************************************************************************
+FieldWidth      EQU     12
+Field           RMB     FieldWidth*16
+FieldBottom     FCC     /############/
+
+
+
+
 
 *******************************************************************************
-SaveVideoRAM        LDY     #VideoRAM       ; Y points to the real video ram
-                    LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
-LoopSaveVRAM        LDA     ,Y+             ; Load in A the real video byte
-                    STA     ,X+             ; And store it in the saved buffer
-                    CMPY    #EndVideoRAM           ; At the end of the video ram?
-                    BNE     LoopSaveVRAM
-                    RTS
-*******************************************************************************
-RestoreVideoRAM     LDY     #VideoRAM       ; Y points to the real video ram
-                    LDX     VideoRAMBuffer  ; X points to the saved buffer video ram
-loopRestoreVRAM     LDA     ,X+             ; Load in A the saved video byte
-                    STA     ,Y+             ; And put in in real video ram
-                    CMPY    #EndVideoRAM            ; At the end of the video ram?
-                    BNE     loopRestoreVRAM
-                    RTS
-*******************************************************************************
-FieldWidth          EQU     12
 Dot                 EQU     $2E
 VideoRAM            EQU     $400                    ; video ram address
 EndVideoRAM         EQU     $600
@@ -608,8 +641,5 @@ NextPieceLabelVRAM  EQU     VideoRAM+(32*2)+FieldWidth+2
 NextPieceVRAM       EQU     VideoRAM+(32*4)+FieldWidth+2
 NextPieceEndVRAM    EQU     VideoRAM+(32*8)+FieldWidth+6
 
-Field               RMB     FieldWidth*16
-FieldBottom         FCC     /############/
-VideoRAMBuffer      RMB     32*16
 UserStack           EQU     *
                     END     Start
