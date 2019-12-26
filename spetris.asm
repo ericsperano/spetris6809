@@ -6,92 +6,94 @@
                 ORG     $3F00
 Start           LDU     #UserStack
                 JSR     SaveVideoRAM            ; save video ram to restore on exit
-                JSR     NewGame
+                JSR     DisplayIntro
+                JMP     EndGame
+                *JSR     NewGame
 
 *-----------------------------------------------------------------------------------------------------------------------
-*                    JSR     DrawInfo
-*                    JSR     GetNextPiece
-*NewPiece            CLR     ForceDown
-*                    JSR     GetNextPiece
-*                    JSR     DrawNextPiece
-*                    LDD     CurrentX                   ; first check if it would fit
-*                    STD     DoesPieceFitX
-*                    LDA     CurrentY
-*                    STA     DoesPieceFitY
-*                    LDA     CurrentRotation
-*                    STA     DoesPieceFitR
-*                    JSR     DoesPieceFit
-*                    LDA     PieceFitFlag
-*                    LBEQ    EndGame
-*MainLoop            LDA     HasToDraw
-*                    BEQ     doSleep                    ; HasToDraw is 0, don't draw
-*                    JSR     DrawField
-*                    JSR     DrawCurrentPiece
-*                    JSR     DisplayScore
-*                    CLR     HasToDraw
-*doSleep             LDA     Falling                    ; skip the sleeping andd stuff if the piece is falling
-*                    BEQ     doSleep_
-*                    INC     ForceDown
-*                    INC     HasToDraw
-*doSleep_            JSR     Sleep                   ; increment the speed count
-*                    INC     SpeedCount
-*                    LDA     SpeedCount              ; and force down if it reached speed max
-*                    CMPA    Speed
-*                    BNE     pollKeyboard           ; if not go straight to poll keyboard
-*                    INC     ForceDown
-*                    INC     HasToDraw
-*                    CLR     SpeedCount
-*pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
-*                    BEQ     chkForceDown            ; No key pressed
-*                    JSR     CheckKeyboard
-*                    LDA     QuitGame
-*                    BNE     EndGame                 ; quit game if QuitGame is 1
-*chkForceDown        LDA     ForceDown
-*                    BEQ     MainLoop                ; force down is 0, don't increment y
-*                    LDD     CurrentX                ; first check if it would fit
-*                    STD     DoesPieceFitX
-*                    LDA     CurrentY
-*                    INCA
-*                    STA     DoesPieceFitY
-*                    LDA     CurrentRotation
-*                    STA     DoesPieceFitR
-*                    JSR     DoesPieceFit
-*                    LDA     PieceFitFlag
-*                    BEQ     lockPiece               ; it doesnt, we lock*
-*
-*                    LDA     DoesPieceFitY           ; it does, increment y
-*                    STA     CurrentY
-*                    CLR     ForceDown
-*                    JMP     MainLoop
-*lockPiece           JSR     LockCurrentPiece
-*                    JSR     CheckForLines
-*                    LDA     HasLines
-*                    LBEQ    NewPiece                ; no lines
-*                    JSR     DrawField
-*                    LDB     #$ff
-*loopSleep           JSR     Sleep
-*                    DECB
-*                    BNE     loopSleep
-*                    JSR     RemoveLines
-*
-*                    JMP     NewPiece
+                    JSR     DrawInfo
+                    JSR     GetNextPiece
+NewPiece            CLR     ForceDown
+                    JSR     GetNextPiece
+                    JSR     DrawNextPiece
+                    LDD     CurrentX                   ; first check if it would fit
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    LBEQ    EndGame
+MainLoop            LDA     HasToDraw
+                    BEQ     doSleep                    ; HasToDraw is 0, don't draw
+                    JSR     DrawField
+                    JSR     DrawCurrentPiece
+                    JSR     DisplayScore
+                    CLR     HasToDraw
+doSleep             LDA     Falling                    ; skip the sleeping andd stuff if the piece is falling
+                    BEQ     doSleep_
+                    INC     ForceDown
+                    INC     HasToDraw
+doSleep_            JSR     Sleep                   ; increment the speed count
+                    INC     SpeedCount
+                    LDA     SpeedCount              ; and force down if it reached speed max
+                    CMPA    Speed
+                    BNE     pollKeyboard           ; if not go straight to poll keyboard
+                    INC     ForceDown
+                    INC     HasToDraw
+                    CLR     SpeedCount
+pollKeyboard        JSR     [POLCAT]                ; Polls keyboard
+                    BEQ     chkForceDown            ; No key pressed
+                    JSR     CheckKeyboard
+                    LDA     QuitGame
+                    BNE     EndGame                 ; quit game if QuitGame is 1
+chkForceDown        LDA     ForceDown
+                    BEQ     MainLoop                ; force down is 0, don't increment y
+                    LDD     CurrentX                ; first check if it would fit
+                    STD     DoesPieceFitX
+                    LDA     CurrentY
+                    INCA
+                    STA     DoesPieceFitY
+                    LDA     CurrentRotation
+                    STA     DoesPieceFitR
+                    JSR     DoesPieceFit
+                    LDA     PieceFitFlag
+                    BEQ     lockPiece               ; it doesnt, we lock*
+
+                    LDA     DoesPieceFitY           ; it does, increment y
+                    STA     CurrentY
+                    CLR     ForceDown
+                    JMP     MainLoop
+lockPiece           JSR     LockCurrentPiece
+                    JSR     CheckForLines
+                    LDA     HasLines
+                    LBEQ    NewPiece                ; no lines
+                    JSR     DrawField
+                    LDB     #$ff
+loopSleep           JSR     Sleep
+                    DECB
+                    BNE     loopSleep
+                    JSR     RemoveLines
+
+                    JMP     NewPiece
 EndGame         JSR     RestoreVideoRAM               ; Cleanup and end execution
                 RTS
 ***********************************************************************************************************************
-* SaveVideoRam:                                                                                                       *
+* SaveVideoRam: saves the current video RAM into a buffer to be restored on exit                                      *
 ***********************************************************************************************************************
-SaveVideoRAM    LDY     #VideoRAM               ; Y points to the real video ram
+SaveVideoRAM    LDY     #VideoRAM               ; Y points to the beginning of the video ram
                 LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
-LoopSaveVRAM    LDA     ,Y+                     ; Load in A the real video byte
+LoopSaveVRAM    LDA     ,Y+                     ; Load in A the byte of video ram
                 STA     ,X+                     ; And store it in the saved buffer
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
                 BNE     LoopSaveVRAM
                 RTS
-VideoRAMBuffer  RMB     32*16
+VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
 ***********************************************************************************************************************
-* RestoreVideoRAM:                                                                                                    *
+* RestoreVideoRAM: restores the video ram from the buffer                                                             *
 ***********************************************************************************************************************
-RestoreVideoRAM LDY     #VideoRAM               ; Y points to the real video ram
+RestoreVideoRAM LDY     #VideoRAM               ; Y points to the beginning ot the video ram
                 LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
 loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
                 STA     ,Y+                     ; And put in in real video ram
@@ -99,10 +101,86 @@ loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
                 BNE     loopRestoreVRAM
                 RTS
 ***********************************************************************************************************************
+* ClsRight
+***********************************************************************************************************************
+ClsRight        PSHU    A,B,X,CC
+                LDA     #$20                    ; space char
+                LDX     #VideoRAM
+loopClsRight0   LDB     #32-FieldWidth
+                LEAX    FieldWidth,X
+loopClsRight1   STA     ,X+
+                DECB
+                BNE     loopClsRight1
+                CMPX    #EndVideoRAM
+                BNE     loopClsRight0
+                PULU    A,B,X,CC
+                RTS
+***********************************************************************************************************************
+* PrintString: prints a non-inverted string ended with char '@'
+*
+* It substracts 64 to every char to display in non-inverted mode, which is why the end of line char is 64
+*
+* X:    Address of the string to display
+* Y:    Video Address where it should be display
+* Registers are restored on return
+***********************************************************************************************************************
+PrintString     PSHU    X,Y,CC
+loopPrintString LDA     ,X+
+                ANDA    #%00111111
+                BEQ     endPrintString
+                STA     ,Y+
+                JMP     loopPrintString
+endPrintString  PULU    X,Y,CC
+                RTS
+***********************************************************************************************************************
+* DisplayIntro                                                                                                        *
+***********************************************************************************************************************
+DisplayIntro    PSHU    X,Y,CC
+                JSR     InitField
+                JSR     DrawField
+                JSR     ClsRight
+                LDX     #IntroTitle
+                LDY     #IntroTitleVRAM
+                JSR     PrintString
+                LDX     #Intro1
+                LDY     #Intro1VRAM
+                JSR     PrintString
+                LDX     #Intro2
+                LDY     #Intro2VRAM
+                JSR     PrintString
+                LDX     #Intro3
+                LDY     #Intro3VRAM
+                JSR     PrintString
+                LDX     #Intro4
+                LDY     #Intro4VRAM
+                JSR     PrintString
+                LDX     #Intro5
+                LDY     #Intro5VRAM
+                JSR     PrintString
+                LDX     #Intro6
+                LDY     #Intro6VRAM
+                JSR     PrintString
+                LDX     #Intro7
+                LDY     #Intro7VRAM
+                JSR     PrintString
+                LDX     #Intro8
+                LDY     #Intro8VRAM
+                JSR     PrintString
+                LDX     #IntroAK1
+                LDY     #IntroAK1VRAM
+                JSR     PrintString
+                LDX     #IntroAK2
+                LDY     #IntroAK2VRAM
+                JSR     PrintString
+diPollKeyboard  JSR     [POLCAT]                ; Polls keyboard
+                BEQ     diPollKeyboard            ; No key pressed
+                PULU    X,Y,CC
+                RTS
+
+***********************************************************************************************************************
 * New Game:                                                                                                           *
 ***********************************************************************************************************************
 NewGame         PSHU    A,B,CC                  ; Save registers used in subroutine
-                JSR     ClearScreen             ; Start by clearin the screeb
                 JSR     RandomizeSeed           ; Randomize the seed with the current timer
                 CLR     QuitGame                ;
                 LDD     #0                      ; Reset score
@@ -114,17 +192,6 @@ NewGame         PSHU    A,B,CC                  ; Save registers used in subrout
                 JSR     InitField
                 JSR     DrawField
                 PULU    A,B,CC                  ; Restore registers used in subroutine
-                RTS
-***********************************************************************************************************************
-* Clear Screen                                                                                                        *
-***********************************************************************************************************************
-ClearScreen     PSHU    A,X,CC
-                LDA     #$20
-                LDX     #VideoRAM
-loopClrScrn     STA     ,X+
-                CMPX    #EndVideoRAM
-                BNE     loopClrScrn
-                PULU    A,X,CC
                 RTS
 ***********************************************************************************************************************
 * GetScoreStr: convert the integer Score into the string ScoreStr                                                                                                        *
@@ -372,13 +439,16 @@ dnpEnd              PULU    A,B,X,Y,CC              ; restore the registers
                     RTS
 dnpDrawChar         FCB     0
 *******************************************************************************
-DrawInfo            LDX     #ScoreLabel
-                    LDY     #ScoreLabelVRAM
-                    JSR     PrintString
-                    LDX     #NextPieceLabel
-                    LDY     #NextPieceLabelVRAM
-                    JSR     PrintString
-                    RTS
+DrawInfo        PSHU    X,Y,CC
+                JSR     ClsRight
+                LDX     #ScoreLabel
+                LDY     #ScoreLabelVRAM
+                JSR     PrintString
+                LDX     #NextPieceLabel
+                LDY     #NextPieceLabelVRAM
+                JSR     PrintString
+                PULU    X,Y,CC
+                RTS
 *******************************************************************************
 DisplayScore        LDX     #ScoreStr
                     LDY     #ScoreVRAM
@@ -529,24 +599,6 @@ mlLoop1             LDA     B,Y
                     JMP     mlLoop0
 endMoveLines        PULS    X
                     RTS
-*******************************************************************************
-* Print (non-inverted) string
-* ---------------------------
-* It substracts 64 to every char to display in non-inverted mode,
-* which means the end of line char is 64
-*
-* X:    Address of the string to display
-* Y:    Video Address where it should be display
-*
-* Both X & Y are restored on return
-PrintString         PSHU    X,Y,CC
-loopPrintString     LDA     ,X+
-                    ANDA    #%00111111
-                    BEQ     endPrintString
-                    STA     ,Y+
-                    JMP     loopPrintString
-endPrintString      PULU    X,Y,CC
-                    RTS
 
 ***********************************************************************************************************************
 ***********************************************************************************************************************
@@ -633,6 +685,29 @@ Pieces              FCC     /..X...X...X...X./      ; rotation 0 piece 0
                     FCC     /.....X...XXX..../      ; rotation 1
                     FCC     /.....XX..X...X../      ; rotation 2
                     FCC     /....XXX...X...../      ; rotation 3
+IntroTitle      FCC     /SPETRIS!@/
+IntroTitleVRAM  EQU     VideoRAM+FieldWidth+6
+Intro1          FCC     /USE THE LEFT, RIGHT@/
+Intro2          FCC     /AND DOWN ARROW KEYS@/
+Intro3          FCC     /TO MOVE THE PIECE.@/
+Intro4          FCC     /USE THE UP ARROW@/
+Intro5          FCC     /KEY TO ROTATE, THE@/
+Intro6          FCC     /SPACEBAR KEY TO@/
+Intro7          FCC     /DROP AND THE P KEY@/
+Intro8          FCC     /TO PAUSE THE GAME.@/
+Intro1VRAM      EQU     VideoRAM+(32*2)+FieldWidth+1
+Intro2VRAM      EQU     VideoRAM+(32*3)+FieldWidth+1
+Intro3VRAM      EQU     VideoRAM+(32*4)+FieldWidth+1
+Intro4VRAM      EQU     VideoRAM+(32*6)+FieldWidth+1
+Intro5VRAM      EQU     VideoRAM+(32*7)+FieldWidth+1
+Intro6VRAM      EQU     VideoRAM+(32*8)+FieldWidth+1
+Intro7VRAM      EQU     VideoRAM+(32*9)+FieldWidth+1
+Intro8VRAM      EQU     VideoRAM+(32*10)+FieldWidth+1
+IntroAK1        FCC     /PRESS ANY KEY@/
+IntroAK1VRAM    EQU     VideoRAM+(32*13)+FieldWidth+4
+IntroAK2        FCC     /TO START GAME@/
+IntroAK2VRAM    EQU     VideoRAM+(32*14)+FieldWidth+4
+
 ScoreLabel          FCC     /SCORE:@/
 ScoreLabelVRAM      EQU     VideoRAM+FieldWidth+2
 ScoreVRAM           EQU     VideoRAM+FieldWidth+2+7
