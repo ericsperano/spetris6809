@@ -8,7 +8,8 @@ Start           LDU     #UserStack
                 JSR     SaveVideoRAM            ; save video ram to restore on exit
                 JSR     DisplayIntro
                 JMP     EndGame
-                *JSR     NewGame
+startNewGame    JSR     NewGame
+
 
 *-----------------------------------------------------------------------------------------------------------------------
                     JSR     DrawInfo
@@ -77,7 +78,12 @@ loopSleep           JSR     Sleep
                     JSR     RemoveLines
 
                     JMP     NewPiece
-EndGame         JSR     RestoreVideoRAM               ; Cleanup and end execution
+EndGame         JSR     GameOver
+                BNE     exitGame
+                JSR     InitField
+                JSR     DrawField
+                JMP     startNewGame
+exitGame        JSR     RestoreVideoRAM               ; Cleanup and end execution
                 RTS
 ***********************************************************************************************************************
 * SaveVideoRam: saves the current video RAM into a buffer to be restored on exit                                      *
@@ -134,6 +140,7 @@ endPrintString  PULU    X,Y,CC
                 RTS
 ***********************************************************************************************************************
 * DisplayIntro                                                                                                        *
+* Registers are restored on return                                                                                    *
 ***********************************************************************************************************************
 DisplayIntro    PSHU    X,Y,CC
                 JSR     InitField
@@ -176,9 +183,32 @@ diPollKeyboard  JSR     [POLCAT]                ; Polls keyboard
                 BEQ     diPollKeyboard            ; No key pressed
                 PULU    X,Y,CC
                 RTS
-
 ***********************************************************************************************************************
-* New Game:                                                                                                           *
+* GameOver displays the final score and ask for a new game.
+* Sets the zero flag of the CC register if the user wants a new game
+* Other registers are restored on return
+***********************************************************************************************************************
+GameOver        PSHU    X,Y
+                JSR     ClsRight                ; clears the right part of the screen
+                LDX     #IntroTitle             ; display SPETRIS at the top
+                LDY     #IntroTitleVRAM
+                JSR     PrintString
+                LDX     #GameOverTitle          ; display game over message
+                LDY     #GameOverVRAM
+                JSR     PrintString
+                LDX     #FinalScore             ; display the final score
+                LDY     #FinalScoreVRAM
+                JSR     PrintString
+                LDX     #AskNewGame             ; ask for a new game
+                LDY     #AskNewGameVRAM
+                JSR     PrintString
+goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
+                BEQ     goPollKeyboard          ; no key pressed
+                CMPA    #'Y'                    ; sets te zero flag to 1 if the key was Y
+                PULU    X,Y
+                RTS
+***********************************************************************************************************************
+* NewGame:                                                                                                           *
 ***********************************************************************************************************************
 NewGame         PSHU    A,B,CC                  ; Save registers used in subroutine
                 JSR     RandomizeSeed           ; Randomize the seed with the current timer
@@ -232,7 +262,7 @@ ITOA002		CLRA
 NUMBER		FDB	0
 DIGIT		FDB	0
 ***********************************************************************************************************************
-* Init Field:                                                                                                         *
+* InitField:                                                                                                         *
 ***********************************************************************************************************************
 InitField       PSHU    A,Y,CC
                 LDY     #Field
@@ -695,6 +725,8 @@ Intro5          FCC     /KEY TO ROTATE, THE@/
 Intro6          FCC     /SPACEBAR KEY TO@/
 Intro7          FCC     /DROP AND THE P KEY@/
 Intro8          FCC     /TO PAUSE THE GAME.@/
+IntroAK1        FCC     /PRESS ANY KEY@/
+IntroAK2        FCC     /TO START GAME@/
 Intro1VRAM      EQU     VideoRAM+(32*2)+FieldWidth+1
 Intro2VRAM      EQU     VideoRAM+(32*3)+FieldWidth+1
 Intro3VRAM      EQU     VideoRAM+(32*4)+FieldWidth+1
@@ -703,11 +735,14 @@ Intro5VRAM      EQU     VideoRAM+(32*7)+FieldWidth+1
 Intro6VRAM      EQU     VideoRAM+(32*8)+FieldWidth+1
 Intro7VRAM      EQU     VideoRAM+(32*9)+FieldWidth+1
 Intro8VRAM      EQU     VideoRAM+(32*10)+FieldWidth+1
-IntroAK1        FCC     /PRESS ANY KEY@/
 IntroAK1VRAM    EQU     VideoRAM+(32*13)+FieldWidth+4
-IntroAK2        FCC     /TO START GAME@/
 IntroAK2VRAM    EQU     VideoRAM+(32*14)+FieldWidth+4
-
+GameOverTitle   FCC     /GAME OVER :(@/
+FinalScore      FCC     /FINAL SCORE:@/
+AskNewGame      FCC     \NEW GAME? Y/N@\
+GameOverVRAM    EQU     VideoRAM+(32*3)+FieldWidth+1
+FinalScoreVRAM  EQU     VideoRAM+(32*5)+FieldWidth+1
+AskNewGameVRAM  EQU     VideoRAM+(32*7)+FieldWidth+1
 ScoreLabel          FCC     /SCORE:@/
 ScoreLabelVRAM      EQU     VideoRAM+FieldWidth+2
 ScoreVRAM           EQU     VideoRAM+FieldWidth+2+7
