@@ -10,7 +10,6 @@
 _HRF            MACRO                           ; HasRoundFlag: macro to check if a round flag is set
                 LDA     RoundFlags
                 ANDA    \1
-                COMA
                 ENDM 
 _SRF            MACRO                           ; SetRoundFlag: macro to set a round flag to 1
                 LDA     RoundFlags
@@ -24,6 +23,7 @@ _RRF            MACRO                           ; ResetRoundFlag: macro to set a
                 COMA
                 STA     RoundFlags
                 ENDM                
+*----------------------------------------------------------------------------------------------------------------------
 SPETRIS         LDU     #UserStack              ; init user stack pointer
                 JSR     SaveVideoRAM            ; save video ram to restore on exit
                 JSR     RandomizeSeed           ; randomize the seed with the current timer
@@ -39,18 +39,18 @@ startRound      JSR     NewRound                ; initialize this round (a round
                 JSR     DoesPieceFit
                 LDA     PieceFitFlag
                 LBEQ    endGame
-roundLoop       _HRF    #FRefreshScreen
-                BNE     sleep                   ; no screen refresh needed
+roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
+                BEQ     sleep                   ; zero flag unset: no screen refresh needed
                 JSR     DrawField
                 JSR     DrawCurrPiece
+                LDY     #ScoreVRAM
                 JSR     DisplayScore
                 _RRF    #FRefreshScreen
 sleep           _HRF    #FFalling
-*doSleep             LDA     Falling                    ; skip the sleeping andd stuff if the piece is falling
-*                    BEQ     doSleep_
-*                    INC     ForceDown
-*                    INC     HasToDraw
-doSleep_        JSR     Sleep                   ; increment the speed count
+                BEQ     sleep1
+                _SRF    #FForceDown
+                _SRF    #FRefreshScreen
+sleep1          JSR     Sleep                   ; increment the speed count
                 INC     SpeedCount
                 LDA     SpeedCount              ; and force down if it reached speed max
                 CMPA    Speed
@@ -62,9 +62,9 @@ pollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BEQ     chkForceDown            ; No key pressed
                 JSR     CheckKeyboard
                 _HRF     #FQuitGame
-                BEQ      exitGame
+                BNE      exitGame
 chkForceDown    _HRF    #FForceDown
-                BNE     roundLoop
+                BEQ     roundLoop
                 LDD     CurrentX                ; first check if it would fit
                 STD     DoesPieceFitX
                 LDA     CurrentY
@@ -82,7 +82,7 @@ chkForceDown    _HRF    #FForceDown
 lockPiece       JSR     LockPiece
                 JSR     CheckForLines
                 _HRF    #FHasLines
-                LBNE    startRound
+                LBEQ    startRound
                 JSR     DrawField
                 LDB     #$ff
 loopSleep       JSR     Sleep
@@ -315,6 +315,15 @@ NewRound        CLR     RoundFlags              ; clear the flags for this round
                 JSR     DrawNextPiece
                 RTS
 *======================================================================================================================
+* Sleep:
+*----------------------------------------------------------------------------------------------------------------------
+Sleep           PSHU    A,CC
+                LDA     #SleepTime
+sleepLoop       DECA
+                BNE     sleepLoop
+                PULU    A,CC
+                RTS
+*======================================================================================================================
 * GameOver: displays the final score and ask for a new game
 *
 * CC (w)        Sets the zero flag if the user wants a new game
@@ -325,12 +334,18 @@ GameOver        PSHU    X,Y
                 JSR     PrintString
                 LDX     #FinalScoreLabel        ; display the final score label
                 JSR     PrintString
+                LDY     #FinalScoreVRAM
+                JSR     DisplayScore
                 LDX     #AskNewGameLabel        ; ask for a new game
                 JSR     PrintString
 goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
                 BEQ     goPollKeyboard          ; no key pressed
-                CMPA    #'Y'                    ; sets te zero flag to 1 if the key was Y
-                PULU    X,Y
+                CMPA    #'Y'                    ; sets the zero flag if the key was Y
+                BEQ     endGameOver             ; end exit
+                CMPA    #'N'                    ; poll again if key was not N
+                BNE     goPollKeyboard  
+                LDA     #1                      ; unset the zero flag for N key
+endGameOver     PULU    X,Y
                 RTS
 
 
@@ -349,7 +364,14 @@ goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
 GetScoreStr     PSHU	X,Y,A,B,CC              ;TODO why doesnt work with pshsu  ???
                 LDX     #ScoreStr
                 JSR	ITOA003
-		PULU    X,Y,A,B,CC
+                LDX     #ScoreStr
+                LDB     #KeySpace
+trimZeros       LDA     ,X
+                CMPA    #'0'
+                BNE     gssEnd          
+                STB     ,X+
+                JMP     trimZeros
+gssEnd		PULU    X,Y,A,B,CC
 		RTS
 ITOA003		LDY 	#10000
 	        JSR	ITOA000
@@ -493,20 +515,17 @@ dcpEnd          PULU    A,B,X,Y,CC              ; restore the registers
 dcpDrawChar     FCB     0
 dcpDrawEndAddr  FDB     0
 *******************************************************************************
-DisplayScore    LDX     #ScoreStr
-                LDY     #ScoreVRAM
+* Y: address to display
+DisplayScore    PSHU    A,B,X,Y,CC
+                LDX     #ScoreStr
                 LDB     #5
 lpDisplayScore  LDA     ,X+
                 STA     ,Y+
                 DECB
                 BNE     lpDisplayScore
-                RTS
-*******************************************************************************
-Sleep           PSHU    A,CC
-                LDA     #SleepTime
-sleepLoop       DECA
-                BNE     sleepLoop
-                PULU    A,CC
+                LDA     #'0'
+                STA     ,Y
+                PULU    A,B,X,Y,CC
                 RTS
 *******************************************************************************
 DoesPieceFit    PSHU    Y,X,A,B,CC
@@ -674,10 +693,10 @@ FQuitGame       EQU     %00100000
 *======================================================================================================================
 * Char constants
 *----------------------------------------------------------------------------------------------------------------------
-ChSpc           EQU     128 ;+(16*0)+15
+ChSpc           EQU     128 
 ChFieldLeft     EQU     128+(16*0)+5
 ChFieldRight    EQU     128+(16*0)+10
-ChLine          EQU     61
+ChLine          EQU     $2A
 ChDot           EQU     $2E
 *======================================================================================================================
 * Key constants
@@ -745,7 +764,7 @@ Pieces          FCC     /..X...X...X...X./      ; rotation 0 piece 0
 *======================================================================================================================
 * Displayable strings
 *----------------------------------------------------------------------------------------------------------------------
-GameTitle       FDB     VideoRAM+FieldWidth+6
+GameTitle       FDB     VideoRAM+FieldWidth+7
                 FCC     /SPETRIS!@/
 Intro1          FDB     VideoRAM+(32*2)+FieldWidth+1
                 FCC     /USE THE LEFT, RIGHT@/
@@ -767,18 +786,19 @@ IntroAK1        FDB     VideoRAM+(32*13)+FieldWidth+4
                 FCC     /PRESS ANY KEY@/
 IntroAK2        FDB     VideoRAM+(32*14)+FieldWidth+4
                 FCC     /TO START GAME@/
-ScoreLabel      FDB     VideoRAM+(FieldWidth*2)+1
+ScoreLabel      FDB     VideoRAM+(32*3)+FieldWidth+1
                 FCC     /SCORE:@/
-ScoreVRAM       EQU     VideoRAM+(FieldWidth*2)+7
-NextPieceLabel  FDB     VideoRAM+(32*4)+FieldWidth+2
+ScoreVRAM       EQU     VideoRAM+(32*3)+FieldWidth+7
+NextPieceLabel  FDB     VideoRAM+(32*5)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
-NextPieceVRAM   EQU     VideoRAM+(32*6)+FieldWidth+2
-NextPieceVRAME  EQU     VideoRAM+(32*10)+FieldWidth+6
-GameOverLabel   FDB     VideoRAM+(32*3)+FieldWidth+1
+NextPieceVRAM   EQU     VideoRAM+(32*7)+FieldWidth+1
+NextPieceVRAME  EQU     VideoRAM+(32*11)+FieldWidth+1+4
+GameOverLabel   FDB     VideoRAM+(32*4)+FieldWidth+1+4
                 FCC     /GAME OVER :(@/
-FinalScoreLabel FDB     VideoRAM+(32*5)+FieldWidth+1
+FinalScoreLabel FDB     VideoRAM+(32*7)+FieldWidth+1+4
                 FCC     /FINAL SCORE:@/
-AskNewGameLabel FDB     VideoRAM+(32*7)+FieldWidth+1
+FinalScoreVRAM  EQU     VideoRAM+(32*9)+FieldWidth+1+7
+AskNewGameLabel FDB     VideoRAM+(32*13)+FieldWidth+1+3
                 FCC     \NEW GAME? Y/N@\                
 *======================================================================================================================
 * User stack (end of program)
