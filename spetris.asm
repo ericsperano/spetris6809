@@ -324,6 +324,22 @@ sleepLoop       DECA
                 PULU    A,CC
                 RTS
 *======================================================================================================================
+* DisplayScore:
+*
+* Y (r)         The video address where the score should be written
+*----------------------------------------------------------------------------------------------------------------------
+DisplayScore    PSHU    A,B,X,Y,CC
+                LDX     #ScoreStr
+                LDB     #5
+lpDisplayScore  LDA     ,X+
+                STA     ,Y+
+                DECB
+                BNE     lpDisplayScore
+                LDA     #'0'
+                STA     ,Y
+                PULU    A,B,X,Y,CC
+                RTS
+*======================================================================================================================
 * GameOver: displays the final score and ask for a new game
 *
 * CC (w)        Sets the zero flag if the user wants a new game
@@ -473,7 +489,6 @@ PressSpc        _SRF    #FFalling
 PressBrk        _SRF    #FQuitGame
 endCK           RTS
 *******************************************************************************
-*******************************************************************************
 DrawCurrPiece   PSHU    A,B,X,Y,CC
                 LDX     #PiecesColor            ; get the char to draw
                 LDA     CurrentPiece            ; by indexing PiecesColor
@@ -514,19 +529,6 @@ dcpEnd          PULU    A,B,X,Y,CC              ; restore the registers
                 RTS
 dcpDrawChar     FCB     0
 dcpDrawEndAddr  FDB     0
-*******************************************************************************
-* Y: address to display
-DisplayScore    PSHU    A,B,X,Y,CC
-                LDX     #ScoreStr
-                LDB     #5
-lpDisplayScore  LDA     ,X+
-                STA     ,Y+
-                DECB
-                BNE     lpDisplayScore
-                LDA     #'0'
-                STA     ,Y
-                PULU    A,B,X,Y,CC
-                RTS
 *******************************************************************************
 DoesPieceFit    PSHU    Y,X,A,B,CC
                 LDA     #1                      ; piece fit by default
