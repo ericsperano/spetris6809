@@ -883,9 +883,9 @@ NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
 PausedLabelLen  EQU     6                
 PausedLabel     FDB     VideoRAM+(32*13)+FieldWidth+8
                 FCC     /PAUSED@/
-GameOverLabel   FDB     VideoRAM+(32*6)+FieldWidth+1+4
+GameOverLabel   FDB     VideoRAM+(32*7)+FieldWidth+1+3
                 FCC     /GAME OVER :(@/
-NewHiScoreLabel FDB     VideoRAM+(32*8)+FieldWidth+1+2
+NewHiScoreLabel FDB     VideoRAM+(32*9)+FieldWidth+1+2
                 FCC     /NEW HIGH SCORE!@/
 AskNewGameLabel FDB     VideoRAM+(32*13)+FieldWidth+1+3
                 FCC     \NEW GAME? Y/N@\
