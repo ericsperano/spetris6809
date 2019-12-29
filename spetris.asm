@@ -5,10 +5,8 @@
 * First attempt to 6809 assembler by github.com/ericsperano (2019)
 *
 * TODO PieceCount to increment speed
-* TODO P for PAUSE
 * TODO fix long piece rotation 3 wont move left
 * TODO better does piece fit using registers and round flag
-* TODO using current linear pos instead of x and y coords
 *----------------------------------------------------------------------------------------------------------------------
                 ORG     $3F00
 ; has round flag macro
@@ -46,12 +44,7 @@ SPETRIS         LDU     #UserStack              ; init user stack pointer
                 JSR     DisplayIntro            ; display the intro message and wait for a key to be pressed
 startGame       JSR     NewGame                 ; initialize new game data and screen
 startRound      JSR     NewRound                ; initialize this round (a round is what handle one piece in the game)
-                LDD     CurrentX                ; first check if it would fit
-                STD     DoesPieceFitX
-                LDA     CurrentY
-                STA     DoesPieceFitY
-                LDA     CurrentRot
-                STA     DoesPieceFitR
+                JSR     CopyPieces              ; first check if it would fit
                 JSR     DoesPieceFit
                 *_HRF    FPieceFits
                 LDA     PieceFitFlag
@@ -81,18 +74,14 @@ pollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BNE      exitGame
 chkForceDown    _HRF    #FForceDown
                 BEQ     roundLoop
-                LDD     CurrentX                ; first check if it would fit
-                STD     DoesPieceFitX
-                LDA     CurrentY
-                INCA
-                STA     DoesPieceFitY
-                LDA     CurrentRot
-                STA     DoesPieceFitR
+                JSR     CopyPieces              ; TODO necessary to call again?
+                LDX     #Piece2
+                INC     PieceY,X
                 JSR     DoesPieceFit
                 LDA     PieceFitFlag
                 BEQ     lockPiece               ; it doesnt, we lock*
-                LDA     DoesPieceFitY           ; it does, increment y
-                STA     CurrentY
+                LDX     #Piece1                 ; it does, increment in piece1
+                INC     PieceY,X
                 _CRF    #FForceDown
                 JMP     roundLoop
 lockPiece       JSR     LockPiece
@@ -137,6 +126,19 @@ loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
                 BNE     loopRestoreVRAM
                 PULU    A,X,Y,CC                ; restore registers
+                RTS
+*======================================================================================================================
+* CopyPieces: Copy Piece1 into Piece2
+*----------------------------------------------------------------------------------------------------------------------
+CopyPieces      PSHU    A,B,X,Y,CC
+                LDX     #Piece1
+                LDY     #Piece2
+                LDB     #PieceDescLen
+loopCopyPieces  LDA     ,X+
+                STA     ,Y+
+                DECB
+                BNE     loopCopyPieces
+                PULU    A,B,X,Y,CC
                 RTS
 *======================================================================================================================
 * PrintString: prints a string in non-inverted video at a specified video address.
@@ -267,7 +269,7 @@ _ClsRightPanel  MACRO
 *======================================================================================================================
 * NewGame: initializes the variables for a new game, prepares the field and do an initial drawing of the screen
 *----------------------------------------------------------------------------------------------------------------------
-NewGame         PSHU    A,B,CC                  ; save registers
+NewGame         PSHU    A,B,X,CC                ; save registers
                 LDD     #0                      ; reset score
                 STD     Score
                 LDX     #ScoreStr
@@ -282,25 +284,27 @@ NewGame         PSHU    A,B,CC                  ; save registers
                 _ClsRightPanel
                 LDX     #NextPieceLabel         ; display the next piece lable
                 JSR     PrintString
-                PULU    A,B,CC                  ; restore registers
                 JSR     GetNextPiece            ; initialize next piece
+                PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
 * GetNextPiece:
 *----------------------------------------------------------------------------------------------------------------------
-GetNextPiece    PSHS    A,B,U,CC                ; save registers on the system stack
+GetNextPiece    PSHS    A,B,X,U,CC                ; save registers on the system stack
+                LDX     #Piece1
                 LDA     NextPiece
-                STA     CurrentPiece
-                LDD     #(FieldWidth/2)-2
-                STD     CurrentX
-                CLR     CurrentY
+                STA     PieceId,X
+                LDA     #(FieldWidth/2)-2
+                STA     PieceX,X
+                CLR     PieceY,X
+                CLR     PieceRot,X
                 LDD     #7                      ; random number from 1 to 7
                 JSR     $B4F4                   ; copy D into FPAC 0 (Floating point accumulator)
                 JSR     $BF1F                   ; generate a random number
                 JSR     $B3ED                   ; retrieve FPAC 0; D= your random number
                 DECB                            ; decrement by 1 because number is between 1 and 7
                 STB     NextPiece
-                PULS    A,B,U,CC                ; restore registers from the system stack
+                PULS    A,B,X,U,CC              ; restore registers from the system stack
                 RTS
 *======================================================================================================================
 * DrawNextPiece:
@@ -343,7 +347,7 @@ NewRound        CLR     RoundFlags              ; clear the flags for this round
                 JSR     DrawNextPiece
                 RTS
 *======================================================================================================================
-* Sleep:
+* Sleep:        Loops by doing nothing for a little while
 *----------------------------------------------------------------------------------------------------------------------
 Sleep           PSHU    A,CC
                 LDA     #SleepTime
@@ -386,13 +390,13 @@ endIncScore     PULU    A,B,X,CC                ; restore registers
 * X (r)         The score variable
 * Y (r)         The video address where the score should be written
 *----------------------------------------------------------------------------------------------------------------------
-DisplayScore    PSHU    A,B,X,Y,CC
-                LDB     #5
+DisplayScore    PSHU    A,B,X,Y,CC              ; save registers
+                LDB     #5                      ; score is 5 chars long #TODO constants or check of end of string
 lpDisplayScore  LDA     ,X+
                 STA     ,Y+
                 DECB
                 BNE     lpDisplayScore
-                PULU    A,B,X,Y,CC
+                PULU    A,B,X,Y,CC              ; restore registers
                 RTS
 *======================================================================================================================
 * GameOver: displays the final score and ask for a new game
@@ -466,22 +470,12 @@ ITOA002		CLRA
 NUMBER		FDB	0
 DIGIT		FDB	0
 *======================================================================================================================
-* DrawCurrentPieceCK Macro TODO
-********************************************************************************
-_DoesPieceFitCK MACRO
-                STD     DoesPieceFitX
-                LDA     CurrentY
-                STA     DoesPieceFitY
-                LDA     CurrentRot
-                STA     DoesPieceFitR
-                JSR     DoesPieceFit
-                LDA     PieceFitFlag
-                LBEQ    endCK
-                ENDM
-*======================================================================================================================
 * CheckKeyboard:
+* TODO save registers?
 *----------------------------------------------------------------------------------------------------------------------
-CheckKeyboard   CMPA    #KeyLeft                ; left arrow key?
+CheckKeyboard   LDX     #Piece1                 ; x and y points to piece1 and 2 respectively
+                LDY     #Piece2
+                CMPA    #KeyLeft                ; left arrow key?
                 BEQ     PressLeft
                 CMPA    #KeyRight               ; right arrow key?
                 BEQ     PressRight
@@ -493,78 +487,83 @@ CheckKeyboard   CMPA    #KeyLeft                ; left arrow key?
                 LBEQ    PressSpc
                 CMPA    #KeyEscape              ; break key?
                 LBEQ    PressBrk
+                CMPA    #'P'                    ; P keY?
+                LBEQ    PressP
                 JMP     endCK                   ; ignore other keys
-PressLeft       LDD     CurrentX
-                DECB
-                _DoesPieceFitCK
-                DEC     CurrentX+1
-                _SRF    #FRefreshScreen
+PressLeft       DEC     PieceX,Y                ; decrement X in piece2
+                JSR     DoesPieceFit            ; check if it fits
+                LDA     PieceFitFlag
+                LBEQ    endCK
+                DEC     PieceX,X                ; it fits, decrement X in piece1
+                _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     endCK
-PressRight      LDD     CurrentX
-                INCB
-                _DoesPieceFitCK
-                INC     CurrentX+1
-                _SRF    #FRefreshScreen
+PressRight      INC     PieceX,Y                ; increment X in piece2
+                JSR     DoesPieceFit            ; check if it fits
+                LDA     PieceFitFlag
+                LBEQ    endCK
+                INC     PieceX,X                ; it fits, increment X in piece1
+                _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     endCK
-PressUp         LDA     CurrentRot              ;
-                INCA
-                CMPA    #4                      ; or reset to 0 if == 4
-                BNE     pressUpEnd
+PressUp         INC     PieceRot,Y              ; increment rotation in piece2
+                LDA     PieceRot,Y              ; load in a for comparison
+                CMPA    #4                      ; 4 rotation possibles
+                BNE     pressUpEnd              ; reset to 0 if over 4
                 CLRA
-pressUpEnd      STA     DoesPieceFitR
-                LDD     CurrentX
-                STD     DoesPieceFitX
-                LDA     CurrentY
-                STA     DoesPieceFitY
-                JSR     DoesPieceFit
+pressUpEnd      STA     PieceRot,Y              ; update piece2
+                JSR     DoesPieceFit            ; check if it fits
                 LDA     PieceFitFlag
                 BEQ     endCK
-                LDA     DoesPieceFitR
-                STA     CurrentRot
-                _SRF    #FRefreshScreen
+                LDA     PieceRot,Y              ; it fits, update piece1
+                STA     PieceRot,X
+                _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     endCK
-PressDown       LDD     CurrentX
-                STD     DoesPieceFitX
-                LDA     CurrentY
-                INCA
-                STA     DoesPieceFitY
-                LDA     CurrentRot
-                STA     DoesPieceFitR
-                JSR     DoesPieceFit
+PressDown       INC     PieceY,Y                ; increment Y in piece2
+                JSR     DoesPieceFit            ; check if it fits
                 LDA     PieceFitFlag
                 BEQ     endCK
-                INC     CurrentY
-                _SRF    #FRefreshScreen
+                INC     PieceY,X                ; it fits, increments Y in piece1
+                _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     endCK
-PressSpc        _SRF    #FFalling
+PressSpc        _SRF    #FFalling               ; set the falling flag to on
                 JMP     endCK
-PressBrk        _SRF    #FQuitGame
+PressBrk        _SRF    #FQuitGame              ; set the quit game to exit round loop and game
+                JMP     endCK
+PressP          LDX     #PausedLabel            ; print "paused" message
+                JSR     PrintString
+ckPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
+                BEQ     ckPollKeyboard          ; poll again if no key pressed
+                LDX     #PausedLabel2           ; erase "paused" message
+                JSR     PrintString
 endCK           RTS
 *======================================================================================================================
 * DrawCurrPiece
 *----------------------------------------------------------------------------------------------------------------------
 DrawCurrPiece   PSHU    A,B,X,Y,CC
-                LDX     #PiecesColor            ; get the char to draw
-                LDA     CurrentPiece            ; by indexing PiecesColor
-                LDA     A,X
+                LDX     #Piece1
+                LDY     #PiecesColor            ; get the char to draw
+                LDA     PieceId,X               ; by indexing PiecesColor
+                LDA     A,Y
                 STA     dcpDrawChar             ; the char used to draw
+                LDX     #Piece1
                 LDA     #32                     ; 32 cols per line
-                LDB     CurrentY                ; y position
+                LDB     PieceY,X                ; y position
                 MUL
-                ADDD    CurrentX                ; add x position
+                ADDB    PieceX,X                ; add x position
                 ADDD    #VideoRAM               ; add base pointer
-                TFR     D,Y                     ; Y == video memory where we start to draw
+                *TFR     D,Y                     ; Y == video memory where we start to draw
+                PSHU    D
                 ADDD    #(3*32)+4               ; where we stop to draw
                 STD     dcpDrawEndAddr
-                LDA     CurrentPiece            ; compute the offset in the pieces struct array
+                LDA     PieceId,X               ; compute the offset in the pieces struct array
                 LDB     #PieceStructLen
                 MUL
                 ADDD    #Pieces                 ; add base pointer
-                TFR     D,X                     ; X now points to the beginning of the piece struct to draw
+                TFR     D,Y                     ; X now points to the beginning of the piece struct to draw
                 LDA     #PieceLen               ; Compute the offset for the rotation
-                LDB     CurrentRot
+                LDB     PieceRot,X
                 MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
+                LEAX    D,Y                     ; x now should point to the good rotated shape to draw
+                PULU    Y                       ; Y == video memory where we start to draw
 dcpLoopRow0     LDB     #4                      ; 4 "pixels' per row
 dcpLoopRow1     LDA     ,X+
                 CMPA    #ChDot
@@ -587,25 +586,27 @@ dcpDrawEndAddr  FDB     0
 * DoesPieceFit
 *----------------------------------------------------------------------------------------------------------------------
 DoesPieceFit    PSHU    Y,X,A,B,CC
+                LDX     #Piece2
                 LDA     #1                      ; piece fit by default
                 STA     PieceFitFlag
-                LDB     DoesPieceFitY
+                LDB     PieceY,X
                 LDA     #FieldWidth             ; cols per line
                 MUL
-                ADDD    DoesPieceFitX           ; add X
+                ADDB    PieceX,X                ; add X
                 ADDD    #Field
-                TFR     D,Y                     ; Y == field pos where we start to check
+                PSHU    D
                 ADDD    #(3*FieldWidth)+4       ; where we stop to check
                 STD     dpfFieldEndAddr
-                LDA     CurrentPiece
+                LDA     PieceId,X
                 LDB     #PieceStructLen
                 MUL
                 ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to check
+                TFR     D,Y                     ; X now points to the beginning of the piece struct to check
                 LDA     #PieceLen
-                LDB     DoesPieceFitR
+                LDB     PieceRot,X
                 MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
+                LEAX    D,Y                     ; x now should point to the good rotated shape to draw
+                PULU    Y                       ; Y == field pos where we start to check
 dpfLoopRow0     LDB     #4                      ; 4 "pixels' per row
 dpfLoopRow1     LDA     ,X+
                 CMPA    #ChDot
@@ -630,27 +631,29 @@ dpfFieldEndAddr FDB     0
 * LockPiece:
 *----------------------------------------------------------------------------------------------------------------------
 LockPiece       PSHU    Y,X,A,B,CC
-                LDX     #PiecesColor            ; get the char to draw
-                LDA     CurrentPiece            ; by indexing PiecesColor
-                LDA     A,X
+                LDX     #Piece1
+                LDY     #PiecesColor            ; get the char to draw
+                LDA     PieceId,X               ; by indexing PiecesColor
+                LDA     A,Y
                 STA     lcpDrawChar             ; the char used to draw
-                LDB     CurrentY
+                LDB     PieceY,X
                 LDA     #FieldWidth             ; cols per line
                 MUL
-                ADDD    CurrentX                ; add X
+                ADDB    PieceX,X                ; add X
                 ADDD    #Field
-                TFR     D,Y                     ; Y == field pos where we start to check
+                PSHU    D
                 ADDD    #(3*FieldWidth)+4       ; where we stop to check
                 STD     lcpFieldEndAddr
-                LDA     CurrentPiece
+                LDA     PieceId,X
                 LDB     #PieceStructLen
                 MUL
                 ADDD    #Pieces
-                TFR     D,X                     ; X now points to the beginning of the piece struct to check
+                TFR     D,Y                     ; X now points to the beginning of the piece struct to check
                 LDA     #PieceLen
-                LDB     CurrentRot
+                LDB     PieceRot,X
                 MUL
-                LEAX    D,X                     ; x now should point to the good rotated shape to draw
+                LEAX    D,Y                     ; x now should point to the good rotated shape to draw
+                PULU    y                       ; Y == field pos where we start to check
 lcpLoopRow0     LDB     #4                      ; 4 "pixels' per row
 lcpLoopRow1     LDA     ,X+
                 CMPA    #ChDot
@@ -728,7 +731,6 @@ mlLoop1         LDA     B,Y
                 JMP     mlLoop0
 endMoveLines    PULS    X
                 RTS
-
 *======================================================================================================================
 * Field structure and constants
 *----------------------------------------------------------------------------------------------------------------------
@@ -747,6 +749,16 @@ HighScoreVRAM   EQU     VideoRAM+(32*3)+FieldWidth+1+12
 NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
 NextPieceVRAME  EQU     VideoRAM+(32*12)+FieldWidth+1+4
 *======================================================================================================================
+* Piece descriptors
+*----------------------------------------------------------------------------------------------------------------------
+PieceDescLen    EQU     4
+PieceId         EQU     0
+PieceX          EQU     1
+PieceY          EQU     2
+PieceRot        EQU     3
+Piece1          RMB     PieceDescLen
+Piece2          RMB     PieceDescLen
+*======================================================================================================================
 * Game variables
 *----------------------------------------------------------------------------------------------------------------------
 Score           FDB     0
@@ -756,18 +768,7 @@ HighScoreStr    FCC     /    0 /                ; only initialized here, won't o
 NextPiece       FCB     0
 Speed           FCB     0
 SpeedCount      FCB     0
-DoesPieceFitX   FDB     0
-DoesPieceFitY   FCB     0
-DoesPieceFitR   FCB     0
 PieceFitFlag    FCB     0                       ; TODO use flags
-*======================================================================================================================
-* Game round variables
-*----------------------------------------------------------------------------------------------------------------------
-CurrentX        FDB     0
-CurrentY        FCB     0
-CurrentPos      FDB     0
-CurrentRot      FCB     0
-CurrentPiece    FCB     0
 RoundFlags      FCB     0                       ; different flags for a round using the following constants
 FRefreshScreen  EQU     %00000001
 FPieceFits      EQU     %00000010
@@ -863,6 +864,10 @@ ScoreLabel      FDB     VideoRAM+(32*4)+FieldWidth+1
                 FCC     /SCORE:@/
 NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
+PausedLabel     FDB     VideoRAM+(32*13)+FieldWidth+7
+                FCC     /PAUSED!@/
+PausedLabel2    FDB     VideoRAM+(32*13)+FieldWidth+7
+                FCC     /       @/
 GameOverLabel   FDB     VideoRAM+(32*6)+FieldWidth+1+4
                 FCC     /GAME OVER :(@/
 NewHiScoreLabel FDB     VideoRAM+(32*8)+FieldWidth+1+2
