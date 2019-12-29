@@ -6,7 +6,6 @@
 *
 * TODO PieceCount to increment speed
 * TODO fix long piece rotation 3 wont move left
-* TODO better does piece fit using registers and round flag
 *----------------------------------------------------------------------------------------------------------------------
                 ORG     $3F00
 ; has round flag macro
@@ -46,8 +45,7 @@ startGame       JSR     NewGame                 ; initialize new game data and s
 startRound      JSR     NewRound                ; initialize this round (a round is what handle one piece in the game)
                 JSR     CopyPieces              ; first check if it would fit
                 JSR     DoesPieceFit
-                *_HRF    FPieceFits
-                LDA     PieceFitFlag
+                _HRF    FPieceFits
                 LBEQ    endGame
 roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
                 BEQ     sleep                   ; zero flag unset: no screen refresh needed
@@ -69,7 +67,7 @@ sleep1          JSR     Sleep                   ; increment the speed count
                 CLR     SpeedCount
 pollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BEQ     chkForceDown            ; No key pressed
-                JSR     CheckKeyboard
+                JSR     KeyPressed
                 _HRF     #FQuitGame
                 BNE      exitGame
 chkForceDown    _HRF    #FForceDown
@@ -78,7 +76,7 @@ chkForceDown    _HRF    #FForceDown
                 LDX     #Piece2
                 INC     PieceY,X
                 JSR     DoesPieceFit
-                LDA     PieceFitFlag
+                _HRF    FPieceFits
                 BEQ     lockPiece               ; it doesnt, we lock*
                 LDX     #Piece1                 ; it does, increment in piece1
                 INC     PieceY,X
@@ -108,10 +106,10 @@ exitGame        JSR     RestoreVideoRAM         ; restore video ram
 SaveVideoRAM    PSHU    A,X,Y,CC                ; save registers
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
                 LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
-LoopSaveVRAM    LDA     ,Y+                     ; Load in A the byte of video ram
+svLoop          LDA     ,Y+                     ; Load in A the byte of video ram
                 STA     ,X+                     ; And store it in the saved buffer
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
-                BNE     LoopSaveVRAM
+                BNE     svLoop
                 PULU    A,X,Y,CC                ; restore registers
                 RTS
 VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
@@ -121,10 +119,10 @@ VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
 RestoreVideoRAM PSHU    A,X,Y,CC                ; save registers
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
                 LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
-loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
+rvLoop          LDA     ,X+                     ; Load in A the saved video byte
                 STA     ,Y+                     ; And put in in real video ram
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
-                BNE     loopRestoreVRAM
+                BNE     rvLoop
                 PULU    A,X,Y,CC                ; restore registers
                 RTS
 *======================================================================================================================
@@ -134,10 +132,10 @@ CopyPieces      PSHU    A,B,X,Y,CC
                 LDX     #Piece1
                 LDY     #Piece2
                 LDB     #PieceDescLen
-loopCopyPieces  LDA     ,X+
+cpLoop          LDA     ,X+
                 STA     ,Y+
                 DECB
-                BNE     loopCopyPieces
+                BNE     cpLoop
                 PULU    A,B,X,Y,CC
                 RTS
 *======================================================================================================================
@@ -152,14 +150,14 @@ loopCopyPieces  LDA     ,X+
 *               string and the end of string character is '@'. It substracts 64 to every char so it is displayed
 *               in non-inverted mode. ('@' - 64 == 0)
 *----------------------------------------------------------------------------------------------------------------------
-PrintString     PSHU    X,Y,CC                  ; save registers
+PrintString     PSHU    A,X,Y,CC                ; save registers
                 LEAY    [,X++]                  ; load the first two bytes in Y and advance X to start of string
-loopPS          LDA     ,X+                     ; load char from string
+psLoop          LDA     ,X+                     ; load char from string
                 ANDA    #%00111111              ; keep the right 6 bits
-                BEQ     endPS                   ; exit loop if char is end of string
+                BEQ     psEnd                   ; exit loop if char is end of string
                 STA     ,Y+                     ; display it
-                JMP     loopPS                  ; and loop
-endPS           PULU    X,Y,CC                  ; restore registers
+                JMP     psLoop                  ; and loop
+psEnd           PULU    A,X,Y,CC                ; restore registers
                 RTS
 *======================================================================================================================
 * ClsRight: clear the right side of the screen and print the game name at the top
@@ -167,35 +165,35 @@ endPS           PULU    X,Y,CC                  ; restore registers
 ClsRight        PSHU    A,B,X,CC                ; save registers
                 LDA     #KeySpace               ; char to clear the screen
                 LDX     #VideoRAM               ; x points to the beginning of the video ram
-loopClsRight0   LDB     #32-FieldWidth          ; number of cols on the right side of the field
+crLoop0         LDB     #32-FieldWidth          ; number of cols on the right side of the field
                 LEAX    FieldWidth,X            ; move x to the right side of the field
-loopClsRight1   STA     ,X+                     ; put the char on screen
+crLoop1         STA     ,X+                     ; put the char on screen
                 DECB
-                BNE     loopClsRight1           ; haven't reach the end of the line
+                BNE     crLoop1                 ; haven't reach the end of the line
                 CMPX    #EndVideoRAM            ; check if we are done completely
-                BNE     loopClsRight0
+                BNE     crLoop0
                 LDX     #GameTitle              ; load in x the displayable game title
                 JSR     PrintString             ; print it
                 PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
-* InitField:
+* InitField: Clears the field and set the left and right side characters
 *----------------------------------------------------------------------------------------------------------------------
-InitField       PSHU    A,Y,CC
+InitField       PSHU    A,B,Y,CC
                 LDY     #Field
-                LDA     #ChSpc
-ifLoopClear     STA     ,Y+
-                CMPY    #FieldBottom
+                LDA     #ChSpc                  ; erase with this car
+ifLoopClear     STA     ,Y+                     ; put in video ram
+                CMPY    #FieldBottom            ; until we hit bottom of field
                 BNE     ifLoopClear
-                LDY     #Field
-ifLoop0         LDA     #ChFieldLeft
-                STA     ,Y
-                LDA     #ChFieldRight
-                STA     (FieldWidth-1),Y
-                LEAY    FieldWidth,Y
-                CMPY    #FieldBottom
+                LDY     #Field                  ; reset to beginning of field
+                LDA     #ChFieldLeft            ; will draw left and right sides using the chars in A and B
+                LDB     #ChFieldRight
+ifLoop0         STA     ,Y                      ; store A at the beginning of the field row
+                STB     (FieldWidth-1),Y        ; store B at the end of the field row
+                LEAY    FieldWidth,Y            ; go next row
+                CMPY    #FieldBottom            ; hit bottom?
                 BNE     ifLoop0
-                PULU    A,Y,CC
+                PULU    A,B,Y,CC
                 RTS
 *======================================================================================================================
 * DrawField:
@@ -470,71 +468,85 @@ ITOA002		CLRA
 NUMBER		FDB	0
 DIGIT		FDB	0
 *======================================================================================================================
-* CheckKeyboard:
-* TODO save registers?
+* KeyPressed:   Checks the key pressed and try the following actions:
+*               Arrow key left:         Move 1 left
+*               Arrow key right:        Move 1 right
+*               Arrow key up:           Rotate the piece
+*               Arrow key down:         Move 1 down
+*               Space Bar:              Fall piece until collision
+*               P:                      Pause game
+*               Break:                  Exit game instantly              
+*
+* A (r):        The key pressed
 *----------------------------------------------------------------------------------------------------------------------
-CheckKeyboard   LDX     #Piece1                 ; x and y points to piece1 and 2 respectively
-                LDY     #Piece2
-                CMPA    #KeyLeft                ; left arrow key?
-                BEQ     PressLeft
+KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
+                LDX     #Piece1                 ; Piece1 is the current piece
+                LDY     #Piece2                 ; Piece2 is used to test if it fits
+                CMPA    #KeyLeft                ; was the key press the left arrow key?
+                BEQ     kpLeft
                 CMPA    #KeyRight               ; right arrow key?
-                BEQ     PressRight
+                BEQ     kpRight
                 CMPA    #KeyUp                  ; up arrow key?
-                BEQ     PressUp
+                BEQ     kpUp
                 CMPA    #KeyDown                ; down arrow key?
-                LBEQ    PressDown
+                LBEQ    kpDown
                 CMPA    #KeySpace               ; spacebar key?
-                LBEQ    PressSpc
+                LBEQ    kpSpace
                 CMPA    #KeyEscape              ; break key?
-                LBEQ    PressBrk
-                CMPA    #'P'                    ; P keY?
-                LBEQ    PressP
-                JMP     endCK                   ; ignore other keys
-PressLeft       DEC     PieceX,Y                ; decrement X in piece2
+                LBEQ    kpBreak
+                CMPA    #'P'                    ; P key? TODO
+                LBEQ    kpP
+                JMP     kpEnd                   ; ignore other keys
+kpLeft          DEC     PieceX,Y                ; decrement X in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                LDA     PieceFitFlag
-                LBEQ    endCK
+                _HRF    FPieceFits
+                LBEQ    kpEnd
                 DEC     PieceX,X                ; it fits, decrement X in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
-                JMP     endCK
-PressRight      INC     PieceX,Y                ; increment X in piece2
+                JMP     kpEnd
+kpRight         INC     PieceX,Y                ; increment X in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                LDA     PieceFitFlag
-                LBEQ    endCK
+                _HRF    FPieceFits
+                LBEQ    kpEnd
                 INC     PieceX,X                ; it fits, increment X in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
-                JMP     endCK
-PressUp         INC     PieceRot,Y              ; increment rotation in piece2
+                JMP     kpEnd
+kpUp            INC     PieceRot,Y              ; increment rotation in piece2
                 LDA     PieceRot,Y              ; load in a for comparison
-                CMPA    #4                      ; 4 rotation possibles
-                BNE     pressUpEnd              ; reset to 0 if over 4
+                CMPA    #MaxRotations
+                BNE     kpUpEnd                 ; reset to 0 if over 4
                 CLRA
-pressUpEnd      STA     PieceRot,Y              ; update piece2
+kpUpEnd         STA     PieceRot,Y              ; update piece2
                 JSR     DoesPieceFit            ; check if it fits
-                LDA     PieceFitFlag
-                BEQ     endCK
+                _HRF    FPieceFits
+                BEQ     kpEnd
                 LDA     PieceRot,Y              ; it fits, update piece1
                 STA     PieceRot,X
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
-                JMP     endCK
-PressDown       INC     PieceY,Y                ; increment Y in piece2
+                JMP     kpEnd
+kpDown          INC     PieceY,Y                ; increment Y in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                LDA     PieceFitFlag
-                BEQ     endCK
+                _HRF    FPieceFits
+                BEQ     kpEnd
                 INC     PieceY,X                ; it fits, increments Y in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
-                JMP     endCK
-PressSpc        _SRF    #FFalling               ; set the falling flag to on
-                JMP     endCK
-PressBrk        _SRF    #FQuitGame              ; set the quit game to exit round loop and game
-                JMP     endCK
-PressP          LDX     #PausedLabel            ; print "paused" message
+                JMP     kpEnd
+kpSpace         _SRF    #FFalling               ; set the falling flag to on
+                JMP     kpEnd
+kpBreak         _SRF    #FQuitGame              ; set the quit game to exit round loop and game
+                JMP     kpEnd
+kpP             LDX     #PausedLabel            ; print "paused" message
                 JSR     PrintString
-ckPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
-                BEQ     ckPollKeyboard          ; poll again if no key pressed
-                LDX     #PausedLabel2           ; erase "paused" message
-                JSR     PrintString
-endCK           RTS
+kpPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
+                BEQ     kpPollKeyboard          ; poll again if no key pressed
+                LDY     ,X                      ; get the vram address of the pause message still in X
+                LDA     #' '                    ; space char to erase with
+                LDB     PausedLabelLen          ; length
+kpLoopPause0    STA     ,Y+                     ; put in video ram
+                DECB
+                BNE     kpLoopPause0            ; loop if there's more to erase
+kpEnd           PULU    A,B,X,Y,CC              ; restore registers
+                RTS
 *======================================================================================================================
 * DrawCurrPiece
 *----------------------------------------------------------------------------------------------------------------------
@@ -585,10 +597,9 @@ dcpDrawEndAddr  FDB     0
 *======================================================================================================================
 * DoesPieceFit
 *----------------------------------------------------------------------------------------------------------------------
-DoesPieceFit    PSHU    Y,X,A,B,CC
+DoesPieceFit    PSHU    Y,X,A,B,CC              ; TODO not standard push order
                 LDX     #Piece2
-                LDA     #1                      ; piece fit by default
-                STA     PieceFitFlag
+                _SRF    #FPieceFits             ; piece fit by default
                 LDB     PieceY,X
                 LDA     #FieldWidth             ; cols per line
                 MUL
@@ -616,7 +627,7 @@ dpfLoopRow1     LDA     ,X+
 dpfCheck        LDA     ,Y+                     ; the char to draw, from the stack
                 CMPA    #ChSpc
                 BEQ     dpfEndCheck
-                CLR     PieceFitFlag            ; piece does not fit
+                _CRF    #FPieceFits             ; piece does not fit
                 JMP     dpfEnd
 dpfEndCheck     DECB
                 BNE     dpfLoopRow1
@@ -630,7 +641,7 @@ dpfFieldEndAddr FDB     0
 *======================================================================================================================
 * LockPiece:
 *----------------------------------------------------------------------------------------------------------------------
-LockPiece       PSHU    Y,X,A,B,CC
+LockPiece       PSHU    Y,X,A,B,CC              ; TODO not standard push order
                 LDX     #Piece1
                 LDY     #PiecesColor            ; get the char to draw
                 LDA     PieceId,X               ; by indexing PiecesColor
@@ -741,6 +752,7 @@ FieldBottom     FCC     /############/          ; won't be displayed but used fo
 * Game constants
 *----------------------------------------------------------------------------------------------------------------------
 POLCAT	        EQU	$A000	                ; read keyboard ROM routine
+MaxRotations    EQU     4
 SleepTime       EQU     $FF
 VideoRAM        EQU     $400                    ; video ram address
 EndVideoRAM     EQU     $600
@@ -750,6 +762,8 @@ NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
 NextPieceVRAME  EQU     VideoRAM+(32*12)+FieldWidth+1+4
 *======================================================================================================================
 * Piece descriptors
+* Piece1 is used for the current piece in the field
+* Piece2 is used to check for a potential piece fit in the field
 *----------------------------------------------------------------------------------------------------------------------
 PieceDescLen    EQU     4
 PieceId         EQU     0
@@ -768,7 +782,6 @@ HighScoreStr    FCC     /    0 /                ; only initialized here, won't o
 NextPiece       FCB     0
 Speed           FCB     0
 SpeedCount      FCB     0
-PieceFitFlag    FCB     0                       ; TODO use flags
 RoundFlags      FCB     0                       ; different flags for a round using the following constants
 FRefreshScreen  EQU     %00000001
 FPieceFits      EQU     %00000010
@@ -787,12 +800,15 @@ ChDot           EQU     $2E
 *======================================================================================================================
 * Key constants
 *----------------------------------------------------------------------------------------------------------------------
-KeyUp		EQU	$5E
+KeyUp		EQU	$5E                     
 KeyDown		EQU 	$0A
 KeyLeft         EQU     $08
 KeyRight        EQU     $09
 KeyEscape       EQU     $03                     ; Break
 KeySpace        EQU     $20
+* KeyP  TODO
+* KeyY  TODO 
+* KeyN  TODO
 *======================================================================================================================
 * Pieces colors and shapes
 *----------------------------------------------------------------------------------------------------------------------
@@ -864,10 +880,9 @@ ScoreLabel      FDB     VideoRAM+(32*4)+FieldWidth+1
                 FCC     /SCORE:@/
 NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
-PausedLabel     FDB     VideoRAM+(32*13)+FieldWidth+7
-                FCC     /PAUSED!@/
-PausedLabel2    FDB     VideoRAM+(32*13)+FieldWidth+7
-                FCC     /       @/
+PausedLabelLen  EQU     6                
+PausedLabel     FDB     VideoRAM+(32*13)+FieldWidth+8
+                FCC     /PAUSED@/
 GameOverLabel   FDB     VideoRAM+(32*6)+FieldWidth+1+4
                 FCC     /GAME OVER :(@/
 NewHiScoreLabel FDB     VideoRAM+(32*8)+FieldWidth+1+2
@@ -877,6 +892,6 @@ AskNewGameLabel FDB     VideoRAM+(32*13)+FieldWidth+1+3
 *======================================================================================================================
 * User stack (end of program)
 *----------------------------------------------------------------------------------------------------------------------
-                RMB     64                              ; user stack space TODO maybe even less????
-UserStack       EQU     *                               ; have the user stack at the end of the program
+                RMB     32                      ; user stack space TODO maybe even less or more????
+UserStack       EQU     *                       ; have the user stack at the end of the program
                 END     SPETRIS
