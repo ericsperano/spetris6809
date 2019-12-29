@@ -46,7 +46,7 @@ startRound      JSR     NewRound                ; initialize this round (a round
                 STD     DoesPieceFitX
                 LDA     CurrentY
                 STA     DoesPieceFitY
-                LDA     CurrentRotation
+                LDA     CurrentRot
                 STA     DoesPieceFitR
                 JSR     DoesPieceFit
                 *_HRF    FPieceFits
@@ -82,7 +82,7 @@ chkForceDown    _HRF    #FForceDown
                 LDA     CurrentY
                 INCA
                 STA     DoesPieceFitY
-                LDA     CurrentRotation
+                LDA     CurrentRot
                 STA     DoesPieceFitR
                 JSR     DoesPieceFit
                 LDA     PieceFitFlag
@@ -468,7 +468,7 @@ _DoesPieceFitCK MACRO
                 STD     DoesPieceFitX
                 LDA     CurrentY
                 STA     DoesPieceFitY
-                LDA     CurrentRotation
+                LDA     CurrentRot
                 STA     DoesPieceFitR
                 JSR     DoesPieceFit
                 LDA     PieceFitFlag
@@ -502,7 +502,7 @@ PressRight      LDD     CurrentX
                 INC     CurrentX+1
                 _SRF    #FRefreshScreen
                 JMP     endCK
-PressUp         LDA     CurrentRotation         ; KeyUp! Increment rotation
+PressUp         LDA     CurrentRot               ; KeyUp! Increment rotation
                 INCA
                 CMPA    #4                      ; or reset to 0 if == 4
                 BNE     pressUpEnd
@@ -516,7 +516,7 @@ pressUpEnd      STA     DoesPieceFitR
                 LDA     PieceFitFlag
                 BEQ     endCK
                 LDA     DoesPieceFitR
-                STA     CurrentRotation
+                STA     CurrentRot
                 _SRF    #FRefreshScreen
                 JMP     endCK
 PressDown       LDD     CurrentX
@@ -524,7 +524,7 @@ PressDown       LDD     CurrentX
                 LDA     CurrentY
                 INCA
                 STA     DoesPieceFitY
-                LDA     CurrentRotation
+                LDA     CurrentRot
                 STA     DoesPieceFitR
                 JSR     DoesPieceFit
                 LDA     PieceFitFlag
@@ -558,7 +558,7 @@ DrawCurrPiece   PSHU    A,B,X,Y,CC
                 ADDD    #Pieces                 ; add base pointer
                 TFR     D,X                     ; X now points to the beginning of the piece struct to draw
                 LDA     #PieceLen               ; Compute the offset for the rotation
-                LDB     CurrentRotation
+                LDB     CurrentRot
                 MUL
                 LEAX    D,X                     ; x now should point to the good rotated shape to draw
 dcpLoopRow0     LDB     #4                      ; 4 "pixels' per row
@@ -644,7 +644,7 @@ LockPiece       PSHU    Y,X,A,B,CC
                 ADDD    #Pieces
                 TFR     D,X                     ; X now points to the beginning of the piece struct to check
                 LDA     #PieceLen
-                LDB     CurrentRotation
+                LDB     CurrentRot
                 MUL
                 LEAX    D,X                     ; x now should point to the good rotated shape to draw
 lcpLoopRow0     LDB     #4                      ; 4 "pixels' per row
@@ -744,6 +744,8 @@ POLCAT	        EQU	$A000	                ; read keyboard ROM routine
 *======================================================================================================================
 * Game round variables
 *----------------------------------------------------------------------------------------------------------------------
+CurrentPos      FDB     0
+CurrentRot      FCB     0
 CurrentPiece    FCB     0
 RoundFlags      FCB     0
 FRefreshScreen  EQU     %00000001
@@ -777,7 +779,6 @@ ScoreStr        RMB     6
 HighScoreStr    FCC     /    0 /
 CurrentX        FDB     0
 CurrentY        FCB     0
-CurrentRotation FCB     0
 Speed           FCB     0
 SpeedCount      FCB     0
 DoesPieceFitX   FDB     0
