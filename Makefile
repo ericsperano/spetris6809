@@ -1,9 +1,10 @@
+SHELL=/bin/bash -o pipefail
 DSK:=spetris.dsk
 SRC := spetris.asm
 ASM := lwasm
 ASM_FLAGS := -9bl -p cd
 OBJ := ${SRC:asm=bin}
-MAME := mame 
+MAME := mame
 MAME_ARGS := coco3 -window -nomax -flop1
 
 .PHONY: all
@@ -11,6 +12,7 @@ MAME_ARGS := coco3 -window -nomax -flop1
 all: $(DSK)
 
 $(DSK) : $(OBJ)
+	rm -f $(DSK)
 	decb dskini $(DSK)
 	decb copy -0 -a -t -r autoexec.bas $(DSK),AUTOEXEC.BAS
 	decb copy -0 -a -t -r autoexec.bas $(DSK),S.BAS

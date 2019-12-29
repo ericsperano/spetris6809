@@ -1,5 +1,5 @@
 *======================================================================================================================
-* Spétris                                                                                                             
+* Spétris
 *
 * Tetris Clone for the Color Computer
 * First attempt to 6809 assembler by github.com/ericsperano (2019)
@@ -7,22 +7,34 @@
 * TODO PieceCount to increment speed
 *----------------------------------------------------------------------------------------------------------------------
                 ORG     $3F00
-_HRF            MACRO                           ; HasRoundFlag: macro to check if a round flag is set
+; has round flag macro
+_HRF            MACRO
                 LDA     RoundFlags
                 ANDA    \1
-                ENDM 
-_SRF            MACRO                           ; SetRoundFlag: macro to set a round flag to 1
+                ENDM
+; set round flag macro
+_SRF            MACRO
                 LDA     RoundFlags
                 ORA     \1
                 STA     RoundFlags
-                ENDM         
-_RRF            MACRO                           ; ResetRoundFlag: macro to set a round flag to 0
+                ENDM
+; clear round flag macro
+_CRF            MACRO
                 LDA     RoundFlags
                 COMA
                 ORA     \1
                 COMA
                 STA     RoundFlags
-                ENDM                
+                ENDM
+; draw scores macro
+_DRSCRS         MACRO
+                LDX     #ScoreStr               ; current score string to display
+                LDY     #ScoreVRAM              ; position on screen
+                JSR     DisplayScore            ; display it
+                LDX     #HighScoreStr           ; high score string to display
+                LDY     #HighScoreVRAM          ; position on string
+                JSR     DisplayScore            ; display it
+                ENDM
 *----------------------------------------------------------------------------------------------------------------------
 SPETRIS         LDU     #UserStack              ; init user stack pointer
                 JSR     SaveVideoRAM            ; save video ram to restore on exit
@@ -30,22 +42,22 @@ SPETRIS         LDU     #UserStack              ; init user stack pointer
                 JSR     DisplayIntro            ; display the intro message and wait for a key to be pressed
 startGame       JSR     NewGame                 ; initialize new game data and screen
 startRound      JSR     NewRound                ; initialize this round (a round is what handle one piece in the game)
-                LDD     CurrentX                   ; first check if it would fit
+                LDD     CurrentX                ; first check if it would fit
                 STD     DoesPieceFitX
                 LDA     CurrentY
                 STA     DoesPieceFitY
                 LDA     CurrentRotation
                 STA     DoesPieceFitR
                 JSR     DoesPieceFit
+                *_HRF    FPieceFits
                 LDA     PieceFitFlag
                 LBEQ    endGame
 roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
                 BEQ     sleep                   ; zero flag unset: no screen refresh needed
-                JSR     DrawField
-                JSR     DrawCurrPiece
-                LDY     #ScoreVRAM
-                JSR     DisplayScore
-                _RRF    #FRefreshScreen
+                JSR     DrawField               ; draw current state of the field
+                JSR     DrawCurrPiece           ; draw current piece
+                _DRSCRS                         ; draw scores
+                _CRF    #FRefreshScreen         ; clear the refresh screen flag
 sleep           _HRF    #FFalling
                 BEQ     sleep1
                 _SRF    #FForceDown
@@ -77,7 +89,7 @@ chkForceDown    _HRF    #FForceDown
                 BEQ     lockPiece               ; it doesnt, we lock*
                 LDA     DoesPieceFitY           ; it does, increment y
                 STA     CurrentY
-                _RRF    #FForceDown
+                _CRF    #FForceDown
                 JMP     roundLoop
 lockPiece       JSR     LockPiece
                 JSR     CheckForLines
@@ -91,14 +103,14 @@ loopSleep       JSR     Sleep
                 JSR     RemoveLines
                 JMP     startRound
 endGame         JSR     GameOver                ; game over message, zero flag is set if a new game is requested
-                BNE     exitGame                
+                BNE     exitGame
                 JSR     InitField               ; clear the field
                 JSR     DrawField               ; (init and drawfield were done in display intro)
                 JMP     startGame               ; and go back to game initialization
 exitGame        JSR     RestoreVideoRAM         ; restore video ram
                 RTS
 *======================================================================================================================
-* SaveVideoRam: saves the current video RAM into a buffer to be restored on exit                                      
+* SaveVideoRam: saves the current video RAM into a buffer to be restored on exit
 *----------------------------------------------------------------------------------------------------------------------
 SaveVideoRAM    PSHU    A,X,Y,CC                ; save registers
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
@@ -111,7 +123,7 @@ LoopSaveVRAM    LDA     ,Y+                     ; Load in A the byte of video ra
                 RTS
 VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
 *======================================================================================================================
-* RestoreVideoRAM: restores the video ram from the buffer                                                             
+* RestoreVideoRAM: restores the video ram from the buffer
 *----------------------------------------------------------------------------------------------------------------------
 RestoreVideoRAM PSHU    A,X,Y,CC                ; save registers
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
@@ -126,7 +138,7 @@ loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
 * PrintString: prints a string in non-inverted video at a specified video address.
 *
 * X (read):     Points to a displayable string structure:
-*               bytes  0      2    3   ... n   n+1  
+*               bytes  0      2    3   ... n   n+1
 *                      +---+---+---+---+---+---+
 *                      | VRAM  | String    | @ |
 *                      +---+---+---+---+---+---+
@@ -136,9 +148,9 @@ loopRestoreVRAM LDA     ,X+                     ; Load in A the saved video byte
 *----------------------------------------------------------------------------------------------------------------------
 PrintString     PSHU    X,Y,CC                  ; save registers
                 LEAY    [,X++]                  ; load the first two bytes in Y and advance X to start of string
-loopPS          LDA     ,X+                     ; load char from string         
+loopPS          LDA     ,X+                     ; load char from string
                 ANDA    #%00111111              ; keep the right 6 bits
-                BEQ     endPS                   ; exit loop if char is end of string 
+                BEQ     endPS                   ; exit loop if char is end of string
                 STA     ,Y+                     ; display it
                 JMP     loopPS                  ; and loop
 endPS           PULU    X,Y,CC                  ; restore registers
@@ -161,7 +173,7 @@ loopClsRight1   STA     ,X+                     ; put the char on screen
                 PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
-* InitField:                                                                                                         
+* InitField:
 *----------------------------------------------------------------------------------------------------------------------
 InitField       PSHU    A,Y,CC
                 LDY     #Field
@@ -180,7 +192,7 @@ ifLoop0         LDA     #ChFieldLeft
                 PULU    A,Y,CC
                 RTS
 *======================================================================================================================
-* DrawField:                                                                                                          
+* DrawField:
 *----------------------------------------------------------------------------------------------------------------------
 DrawField       PSHU    A,B,X,Y,CC
                 LDY     #VideoRAM               ; Y points to the real video ram
@@ -196,7 +208,7 @@ dfLoop2         LDA     ,X+                     ; Load in A the byte to display
                 PULU    A,B,X,Y,CC
                 RTS
 *======================================================================================================================
-* DisplayIntro:                                                                                                       
+* DisplayIntro:
 *----------------------------------------------------------------------------------------------------------------------
 DisplayIntro    PSHU    X,Y,CC                  ; save registers
                 JSR     InitField               ; display an empty field to the left
@@ -227,7 +239,7 @@ diPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
                 PULU    X,Y,CC                  ; restore registers
                 RTS
 *======================================================================================================================
-* RandomizeSeed:                                                                                                      
+* RandomizeSeed:
 *----------------------------------------------------------------------------------------------------------------------
 RandomizeSeed   PSHS    A,B,U                   ; save registers on the system stack
                 LDD     $112                    ; timer value
@@ -238,23 +250,35 @@ RandomizeSeed   PSHS    A,B,U                   ; save registers on the system s
                 PULS    A,B,U                   ; restore registers from the system stack
                 RTS
 *======================================================================================================================
-* NewGame: initializes the variables for a new game, prepares the field and do an initial drawing of the screen 
+* ClsRightPanel:
+*----------------------------------------------------------------------------------------------------------------------
+_ClsRightPanel  MACRO
+                JSR     ClsRight                ; clear the right side and print the game title
+                LDX     #HighScoreLabel         ; display the score label
+                JSR     PrintString
+                LDX     #ScoreLabel             ; display the score label
+                JSR     PrintString
+                ENDM
+*----------------------------------------------------------------------------------------------------------------------
+*======================================================================================================================
+* NewGame: initializes the variables for a new game, prepares the field and do an initial drawing of the screen
 *----------------------------------------------------------------------------------------------------------------------
 NewGame         PSHU    A,B,CC                  ; save registers
                 LDD     #0                      ; reset score
                 STD     Score
-                JSR     GetScoreStr             ; reset score string
+                LDX     #ScoreStr
+                JSR     IntToStr             ; reset score string
+                LDA     #'0'
+                STA     4,X
                 CLR     SpeedCount
                 LDA     #$FF                    ; reset speed
                 STA     Speed
                 JSR     InitField               ; initialize field
                 JSR     DrawField               ; display the field on the left
-                PULU    A,B,CC                  ; restore registers 
-                JSR     ClsRight                ; clear the right side and print the game title
-                LDX     #ScoreLabel             ; display the score label
-                JSR     PrintString
+                _ClsRightPanel
                 LDX     #NextPieceLabel         ; display the next piece lable
                 JSR     PrintString
+                PULU    A,B,CC                  ; restore registers
                 JSR     GetNextPiece            ; initialize next piece
                 RTS
 *======================================================================================================================
@@ -324,19 +348,46 @@ sleepLoop       DECA
                 PULU    A,CC
                 RTS
 *======================================================================================================================
+* IncScore:     increments score by at least 25 (one piece was lock)
+*               then by (1 << lines) * 100
+*               It will also set the high score if new score is higher
+*               and prepare the strings variables for both
+* A (r)         nbLines
+* Score (rw)    the current score
+*----------------------------------------------------------------------------------------------------------------------
+IncScore        PSHU    A,B,X,CC                ; save registers
+                CLRB
+                CMPA    #0                      ; check if there are lines points
+                BEQ     isAdd25                 ; no, just the 25
+                LDB     #1                      ; will shift 1 left by the number of lines
+isShift         LSLB                            ; shift b to the left
+                DECA                            ; decrement lines count
+                BNE     isShift                 ; shift again if more lines
+                LDA     #100                    ; will multiply b by 100
+                MUL
+isAdd25         ADDD    #25                     ; add the mininal 25
+                ADDD    Score                   ; add the current score
+                STD     Score                   ; and save it
+                LDX     #ScoreStr
+                JSR     IntToStr                ; and update the score str for display
+                CMPD    HighScore               ; compare with current high score
+                BLT     endIncScore             ; smaller, no update
+                STD     HighScore
+                LDX     #HighScoreStr
+                JSR     IntToStr
+endIncScore     PULU    A,B,X,CC                ; restore registers
+                RTS
+*======================================================================================================================
 * DisplayScore:
-*
+* X (r)         The score variable
 * Y (r)         The video address where the score should be written
 *----------------------------------------------------------------------------------------------------------------------
 DisplayScore    PSHU    A,B,X,Y,CC
-                LDX     #ScoreStr
                 LDB     #5
 lpDisplayScore  LDA     ,X+
                 STA     ,Y+
                 DECB
                 BNE     lpDisplayScore
-                LDA     #'0'
-                STA     ,Y
                 PULU    A,B,X,Y,CC
                 RTS
 *======================================================================================================================
@@ -345,46 +396,39 @@ lpDisplayScore  LDA     ,X+
 * CC (w)        Sets the zero flag if the user wants a new game
 *----------------------------------------------------------------------------------------------------------------------
 GameOver        PSHU    X,Y
-                JSR     ClsRight                ; clears the right part of the screen
+                _ClsRightPanel
+                _DRSCRS                         ; draw scores
                 LDX     #GameOverLabel          ; display game over message
                 JSR     PrintString
-                LDX     #FinalScoreLabel        ; display the final score label
+                LDD     Score                   ; check if new high score
+                CMPD    HighScore
+                BLT     goAskNewGame            ; no new high score
+                LDX     #NewHiScoreLabel
                 JSR     PrintString
-                LDY     #FinalScoreVRAM
-                JSR     DisplayScore
-                LDX     #AskNewGameLabel        ; ask for a new game
+goAskNewGame    LDX     #AskNewGameLabel        ; ask for a new game
                 JSR     PrintString
 goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
                 BEQ     goPollKeyboard          ; no key pressed
                 CMPA    #'Y'                    ; sets the zero flag if the key was Y
                 BEQ     endGameOver             ; end exit
                 CMPA    #'N'                    ; poll again if key was not N
-                BNE     goPollKeyboard  
+                BNE     goPollKeyboard
                 LDA     #1                      ; unset the zero flag for N key
 endGameOver     PULU    X,Y
                 RTS
-
-
-
-
-
-
-
-
-
-***********************************************************************************************************************
-* GetScoreStr: convert the integer Score into the string ScoreStr                                                                
-*    D=Score
-*    Stolen and adapted from Coco SDC-Explorer :)
-***********************************************************************************************************************
-GetScoreStr     PSHU	X,Y,A,B,CC              ;TODO why doesnt work with pshsu  ???
-                LDX     #ScoreStr
+*======================================================================================================================
+* IntToStr: convert an unsigned integer to a string. Stolen from Coco SDC-Explorer :)
+*
+* D (r):        Unsigned integer value
+* X (r):        buffer pointer (should be at least 6 bytes)
+*----------------------------------------------------------------------------------------------------------------------
+IntToStr        PSHU	X,Y,A,B,CC
                 JSR	ITOA003
-                LDX     #ScoreStr
+                LDX     3,U
                 LDB     #KeySpace
 trimZeros       LDA     ,X
                 CMPA    #'0'
-                BNE     gssEnd          
+                BNE     gssEnd
                 STB     ,X+
                 JMP     trimZeros
 gssEnd		PULU    X,Y,A,B,CC
@@ -417,6 +461,8 @@ ITOA002		CLRA
         	RTS
 NUMBER		FDB	0
 DIGIT		FDB	0
+*======================================================================================================================
+* DrawCurrentPieceCK Macro TODO
 ********************************************************************************
 _DoesPieceFitCK MACRO
                 STD     DoesPieceFitX
@@ -428,7 +474,9 @@ _DoesPieceFitCK MACRO
                 LDA     PieceFitFlag
                 LBEQ    endCK
                 ENDM
-*******************************************************************************
+*======================================================================================================================
+* CheckKeyboard:
+*----------------------------------------------------------------------------------------------------------------------
 CheckKeyboard   CMPA    #KeyLeft                ; left
                 BEQ     PressLeft
                 CMPA    #KeyRight               ; right
@@ -488,7 +536,9 @@ PressSpc        _SRF    #FFalling
                 JMP     endCK
 PressBrk        _SRF    #FQuitGame
 endCK           RTS
-*******************************************************************************
+*======================================================================================================================
+* DrawCurrPiece
+*----------------------------------------------------------------------------------------------------------------------
 DrawCurrPiece   PSHU    A,B,X,Y,CC
                 LDX     #PiecesColor            ; get the char to draw
                 LDA     CurrentPiece            ; by indexing PiecesColor
@@ -529,7 +579,9 @@ dcpEnd          PULU    A,B,X,Y,CC              ; restore the registers
                 RTS
 dcpDrawChar     FCB     0
 dcpDrawEndAddr  FDB     0
-*******************************************************************************
+*======================================================================================================================
+* DoesPieceFit
+*----------------------------------------------------------------------------------------------------------------------
 DoesPieceFit    PSHU    Y,X,A,B,CC
                 LDA     #1                      ; piece fit by default
                 STA     PieceFitFlag
@@ -570,7 +622,9 @@ dpfEndCheck     DECB
 dpfEnd          PULU    Y,X,A,B,CC              ; restore the registers
                 RTS
 dpfFieldEndAddr FDB     0
-*******************************************************************************
+*======================================================================================================================
+* LockPiece:
+*----------------------------------------------------------------------------------------------------------------------
 LockPiece       PSHU    Y,X,A,B,CC
                 LDX     #PiecesColor            ; get the char to draw
                 LDA     CurrentPiece            ; by indexing PiecesColor
@@ -611,34 +665,39 @@ lcpEnd          PULU    Y,X,A,B,CC              ; restore the registers
                 RTS
 lcpDrawChar     FCB     0
 lcpFieldEndAddr FDB     0
-*******************************************************************************
+*======================================================================================================================
+* CheckForLines: goes through the field and check if there are any full lines
+* this routine also updates the score by at least 25pts (we are called because a piece is locked)
+* and by (1 << nblines) * 100
+*----------------------------------------------------------------------------------------------------------------------
 CheckForLines   PSHU    A,B,X,Y,CC
-                _RRF    #FHasLines        
-*                CLR     HasLines
-                LDX     #Field
-cflCheckLine    LDB     #FieldWidth-2
-cflLoop0        LDA     B,X
-                CMPA    #ChSpc
-                BEQ     cflNextLine
-                DECB
-                BNE     cflLoop0
-                _SRF    #FHasLines
-*                INC     HasLines
-                LDD     Score
-                ADDD    #1
-                STD     Score
-                JSR     GetScoreStr
-                LDB     #FieldWidth-2
-                LDA     #ChLine
+                _CRF    #FHasLines              ; clear the has lines flag
+                CLR     linesCount              ; clear the lines count
+                LDX     #Field                  ; X points to the top of the field
+cflCheckRow     LDB     #FieldWidth-2           ; will check the row backward, ignoring the left and right border
+cflLoop0        LDA     B,X                     ; load in a the field charact
+                CMPA    #ChSpc                  ; is it a space?
+                BEQ     cflNextRow              ; yeah, so not a line, look next row
+                DECB                            ; no, keep looking previous char on row
+                BNE     cflLoop0                ; loop if we haven't reach left side
+                _SRF    #FHasLines              ; no space found on the row, we have a line
+                INC     linesCount              ; increment the number of lines found
+                LDB     #FieldWidth-2           ; mark the line in the field for display
+                LDA     #ChLine                 ; by using the line char
 cflLoop1        STA     B,X
                 DECB
                 BNE     cflLoop1
-cflNextLine     LEAX    FieldWidth,X
-                CMPX    #FieldBottom
-                BLT     cflCheckLine
+cflNextRow      LEAX    FieldWidth,X            ; go on to next row
+                CMPX    #FieldBottom            ; check if we reach the bottom of the field
+                BLT     cflCheckRow             ; no, loop
+                LDA     linesCount              ; increment the score, lines count has to be in A
+                JSR     IncScore                ; call sub routine to compute new score
                 PULU    A,B,X,Y,CC
                 RTS
-*******************************************************************************
+linesCount      FCB     0
+*======================================================================================================================
+* RemoveLines
+*----------------------------------------------------------------------------------------------------------------------
 RemoveLines     PSHU    A,B,X,Y,CC
                 LDX     #FieldBottom-FieldWidth
 rlLoop0         LDA     1,X
@@ -676,6 +735,7 @@ FieldBottom     FCC     /############/
 * Game constants and variables
 *----------------------------------------------------------------------------------------------------------------------
 Score           FDB     0
+HighScore       FDB     0
 NextPiece       FCB     0
 SleepTime       EQU     $FF
 VideoRAM        EQU     $400                    ; video ram address
@@ -695,7 +755,7 @@ FQuitGame       EQU     %00100000
 *======================================================================================================================
 * Char constants
 *----------------------------------------------------------------------------------------------------------------------
-ChSpc           EQU     128 
+ChSpc           EQU     128
 ChFieldLeft     EQU     128+(16*0)+5
 ChFieldRight    EQU     128+(16*0)+10
 ChLine          EQU     $2A
@@ -704,7 +764,7 @@ ChDot           EQU     $2E
 * Key constants
 *----------------------------------------------------------------------------------------------------------------------
 KeyUp		EQU	$5E
-KeyDown		EQU 	$0A		               
+KeyDown		EQU 	$0A
 KeyLeft         EQU     $08
 KeyRight        EQU     $09
 KeyEscape       EQU     $03                     ; Break
@@ -713,7 +773,8 @@ KeySpace        EQU     $20
 
 
 *******************************************************************************
-ScoreStr        RMB     16
+ScoreStr        RMB     6
+HighScoreStr    FCC     /    0 /
 CurrentX        FDB     0
 CurrentY        FCB     0
 CurrentRotation FCB     0
@@ -788,20 +849,22 @@ IntroAK1        FDB     VideoRAM+(32*13)+FieldWidth+4
                 FCC     /PRESS ANY KEY@/
 IntroAK2        FDB     VideoRAM+(32*14)+FieldWidth+4
                 FCC     /TO START GAME@/
-ScoreLabel      FDB     VideoRAM+(32*3)+FieldWidth+1
+HighScoreLabel  FDB     VideoRAM+(32*3)+FieldWidth+1
+                FCC     /HIGH SCORE:@/
+HighScoreVRAM   EQU     VideoRAM+(32*3)+FieldWidth+1+12
+ScoreLabel      FDB     VideoRAM+(32*4)+FieldWidth+1
                 FCC     /SCORE:@/
-ScoreVRAM       EQU     VideoRAM+(32*3)+FieldWidth+7
-NextPieceLabel  FDB     VideoRAM+(32*5)+FieldWidth+1
+ScoreVRAM       EQU     VideoRAM+(32*4)+FieldWidth+1+12
+NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
-NextPieceVRAM   EQU     VideoRAM+(32*7)+FieldWidth+1
-NextPieceVRAME  EQU     VideoRAM+(32*11)+FieldWidth+1+4
-GameOverLabel   FDB     VideoRAM+(32*4)+FieldWidth+1+4
+NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
+NextPieceVRAME  EQU     VideoRAM+(32*12)+FieldWidth+1+4
+GameOverLabel   FDB     VideoRAM+(32*6)+FieldWidth+1+4
                 FCC     /GAME OVER :(@/
-FinalScoreLabel FDB     VideoRAM+(32*7)+FieldWidth+1+4
-                FCC     /FINAL SCORE:@/
-FinalScoreVRAM  EQU     VideoRAM+(32*9)+FieldWidth+1+7
+NewHiScoreLabel FDB     VideoRAM+(32*8)+FieldWidth+1+2
+                FCC     /NEW HIGH SCORE!@/
 AskNewGameLabel FDB     VideoRAM+(32*13)+FieldWidth+1+3
-                FCC     \NEW GAME? Y/N@\                
+                FCC     \NEW GAME? Y/N@\
 *======================================================================================================================
 * User stack (end of program)
 *----------------------------------------------------------------------------------------------------------------------
