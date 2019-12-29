@@ -5,6 +5,10 @@
 * First attempt to 6809 assembler by github.com/ericsperano (2019)
 *
 * TODO PieceCount to increment speed
+* TODO P for PAUSE
+* TODO fix long piece rotation 3 wont move left
+* TODO better does piece fit using registers and round flag
+* TODO using current linear pos instead of x and y coords
 *----------------------------------------------------------------------------------------------------------------------
                 ORG     $3F00
 ; has round flag macro
@@ -477,19 +481,19 @@ _DoesPieceFitCK MACRO
 *======================================================================================================================
 * CheckKeyboard:
 *----------------------------------------------------------------------------------------------------------------------
-CheckKeyboard   CMPA    #KeyLeft                ; left
+CheckKeyboard   CMPA    #KeyLeft                ; left arrow key?
                 BEQ     PressLeft
-                CMPA    #KeyRight               ; right
+                CMPA    #KeyRight               ; right arrow key?
                 BEQ     PressRight
-                CMPA    #KeyUp                  ; Up
+                CMPA    #KeyUp                  ; up arrow key?
                 BEQ     PressUp
-                CMPA    #KeyDown                  ; Down
+                CMPA    #KeyDown                ; down arrow key?
                 LBEQ    PressDown
-                CMPA    #KeySpace               ; Spacebar
+                CMPA    #KeySpace               ; spacebar key?
                 LBEQ    PressSpc
-                CMPA    #KeyEscape              ; Break     TODO does not exit
+                CMPA    #KeyEscape              ; break key?
                 LBEQ    PressBrk
-                JMP     endCK         ; ignore other keys
+                JMP     endCK                   ; ignore other keys
 PressLeft       LDD     CurrentX
                 DECB
                 _DoesPieceFitCK
@@ -502,7 +506,7 @@ PressRight      LDD     CurrentX
                 INC     CurrentX+1
                 _SRF    #FRefreshScreen
                 JMP     endCK
-PressUp         LDA     CurrentRot               ; KeyUp! Increment rotation
+PressUp         LDA     CurrentRot              ;
                 INCA
                 CMPA    #4                      ; or reset to 0 if == 4
                 BNE     pressUpEnd
@@ -729,25 +733,42 @@ endMoveLines    PULS    X
 * Field structure and constants
 *----------------------------------------------------------------------------------------------------------------------
 FieldWidth      EQU     12
-Field           RMB     FieldWidth*16
-FieldBottom     FCC     /############/
+Field           RMB     FieldWidth*16           ; 16 rows of 12 cols
+FieldBottom     FCC     /############/          ; won't be displayed but used for collisions
 *======================================================================================================================
-* Game constants and variables
+* Game constants
 *----------------------------------------------------------------------------------------------------------------------
-Score           FDB     0
-HighScore       FDB     0
-NextPiece       FCB     0
+POLCAT	        EQU	$A000	                ; read keyboard ROM routine
 SleepTime       EQU     $FF
 VideoRAM        EQU     $400                    ; video ram address
 EndVideoRAM     EQU     $600
-POLCAT	        EQU	$A000	                ; read keyboard ROM routine
+ScoreVRAM       EQU     VideoRAM+(32*4)+FieldWidth+1+12
+HighScoreVRAM   EQU     VideoRAM+(32*3)+FieldWidth+1+12
+NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
+NextPieceVRAME  EQU     VideoRAM+(32*12)+FieldWidth+1+4
+*======================================================================================================================
+* Game variables
+*----------------------------------------------------------------------------------------------------------------------
+Score           FDB     0
+ScoreStr        RMB     6
+HighScore       FDB     0
+HighScoreStr    FCC     /    0 /                ; only initialized here, won't overwrite on second exec
+NextPiece       FCB     0
+Speed           FCB     0
+SpeedCount      FCB     0
+DoesPieceFitX   FDB     0
+DoesPieceFitY   FCB     0
+DoesPieceFitR   FCB     0
+PieceFitFlag    FCB     0                       ; TODO use flags
 *======================================================================================================================
 * Game round variables
 *----------------------------------------------------------------------------------------------------------------------
+CurrentX        FDB     0
+CurrentY        FCB     0
 CurrentPos      FDB     0
 CurrentRot      FCB     0
 CurrentPiece    FCB     0
-RoundFlags      FCB     0
+RoundFlags      FCB     0                       ; different flags for a round using the following constants
 FRefreshScreen  EQU     %00000001
 FPieceFits      EQU     %00000010
 FForceDown      EQU     %00000100
@@ -771,20 +792,6 @@ KeyLeft         EQU     $08
 KeyRight        EQU     $09
 KeyEscape       EQU     $03                     ; Break
 KeySpace        EQU     $20
-
-
-
-*******************************************************************************
-ScoreStr        RMB     6
-HighScoreStr    FCC     /    0 /
-CurrentX        FDB     0
-CurrentY        FCB     0
-Speed           FCB     0
-SpeedCount      FCB     0
-DoesPieceFitX   FDB     0
-DoesPieceFitY   FCB     0
-DoesPieceFitR   FCB     0
-PieceFitFlag    FCB     0
 *======================================================================================================================
 * Pieces colors and shapes
 *----------------------------------------------------------------------------------------------------------------------
@@ -852,14 +859,10 @@ IntroAK2        FDB     VideoRAM+(32*14)+FieldWidth+4
                 FCC     /TO START GAME@/
 HighScoreLabel  FDB     VideoRAM+(32*3)+FieldWidth+1
                 FCC     /HIGH SCORE:@/
-HighScoreVRAM   EQU     VideoRAM+(32*3)+FieldWidth+1+12
 ScoreLabel      FDB     VideoRAM+(32*4)+FieldWidth+1
                 FCC     /SCORE:@/
-ScoreVRAM       EQU     VideoRAM+(32*4)+FieldWidth+1+12
 NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
-NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
-NextPieceVRAME  EQU     VideoRAM+(32*12)+FieldWidth+1+4
 GameOverLabel   FDB     VideoRAM+(32*6)+FieldWidth+1+4
                 FCC     /GAME OVER :(@/
 NewHiScoreLabel FDB     VideoRAM+(32*8)+FieldWidth+1+2
