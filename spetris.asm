@@ -4,8 +4,9 @@
 * Tetris Clone for the Color Computer
 * First attempt to 6809 assembler by github.com/ericsperano (2019)
 *
-* TODO PieceCount to increment speed
-* TODO fix long piece rotation 3 wont move left and out of borders piece
+* Based on this excellent tutorial on how to write a text mode Tetris clone in C++:
+* https://github.com/OneLoneCoder/videos/blob/master/OneLoneCoder_Tetris.cpp
+* https://www.youtube.com/watch?v=8OK8_tHeCIA
 *----------------------------------------------------------------------------------------------------------------------
                 ORG     $3F00
 ; has round flag macro
@@ -48,7 +49,7 @@ startGame       JSR     NewGame                 ; initialize new game data and s
 startRound      JSR     NewRound                ; initialize this round (a round is what handle one piece in the game)
                 JSR     CopyPieces              ; first check if it would fit
                 JSR     DoesPieceFit
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 LBEQ    endGame
 roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
                 BEQ     sleep                   ; zero flag unset: no screen refresh needed
@@ -71,15 +72,15 @@ sleep1          JSR     Sleep                   ; increment the speed count
 pollKeyboard    JSR     [POLCAT]                ; Polls keyboard
                 BEQ     chkForceDown            ; No key pressed
                 JSR     KeyPressed
-                _HRF     #FQuitGame
-                BNE      exitGame
+                _HRF    #FQuitGame
+                BNE     exitGame
 chkForceDown    _HRF    #FForceDown
                 LBEQ    roundLoop
                 JSR     CopyPieces              ; TODO necessary to call again?
                 LDX     #Piece2
                 INC     PieceY,X
                 JSR     DoesPieceFit
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 BEQ     lockPiece               ; it doesnt, we lock*
                 LDX     #Piece1                 ; it does, increment in piece1
                 INC     PieceY,X
@@ -347,13 +348,13 @@ NewRound        PSHU    A,B,CC
                 STD     TotalPieces             ; save it and update the string version
                 LDX     #TotalPiecesStr
                 JSR     IntToStr                ; and update the score str for display
+                DEC     IncrSpeedCount
                 LDA     IncrSpeedCount          ; check if we need to increase speed
-                DECA
                 BNE     nrNoIncr
                 LDA     SpeedForPiece
                 SUBA    #SpeedBump
                 STA     SpeedForPiece
-                LDA     IncrSpeedEvery          ; reset the incr speed every piece counter
+                LDA     #IncrSpeedEvery         ; reset the incr speed every piece counter
                 STA     IncrSpeedCount
 nrNoIncr        LDA     SpeedForPiece
                 STA     Speed
@@ -515,14 +516,14 @@ KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
                 JMP     kpEnd                   ; ignore other keys
 kpLeft          DEC     PieceX,Y                ; decrement X in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 LBEQ    kpEnd
                 DEC     PieceX,X                ; it fits, decrement X in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     kpEnd
 kpRight         INC     PieceX,Y                ; increment X in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 LBEQ    kpEnd
                 INC     PieceX,X                ; it fits, increment X in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
@@ -534,7 +535,7 @@ kpUp            INC     PieceRot,Y              ; increment rotation in piece2
                 CLRA
 kpUpEnd         STA     PieceRot,Y              ; update piece2
                 JSR     DoesPieceFit            ; check if it fits
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 BEQ     kpEnd
                 LDA     PieceRot,Y              ; it fits, update piece1
                 STA     PieceRot,X
@@ -542,7 +543,7 @@ kpUpEnd         STA     PieceRot,Y              ; update piece2
                 JMP     kpEnd
 kpDown          INC     PieceY,Y                ; increment Y in piece2
                 JSR     DoesPieceFit            ; check if it fits
-                _HRF    FPieceFits
+                _HRF    #FPieceFits
                 BEQ     kpEnd
                 INC     PieceY,X                ; it fits, increments Y in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
@@ -614,7 +615,7 @@ dcpDrawEndAddr  FDB     0
 *======================================================================================================================
 * DoesPieceFit
 *----------------------------------------------------------------------------------------------------------------------
-DoesPieceFit    PSHU    Y,X,A,B,CC              ; TODO not standard push order
+DoesPieceFit    PSHU    A,B,X,Y,CC              ; save registers
                 LDX     #Piece2
                 _SRF    #FPieceFits             ; piece fit by default
                 LDB     PieceY,X
@@ -652,15 +653,14 @@ dpfEndCheck     DECB
                 BGE     dpfEnd
                 LEAY    (FieldWidth-4),Y        ; move at the beginning of next line on video ram (32-width=28)
                 JMP     dpfLoopRow0
-dpfEnd          PULU    Y,X,A,B,CC              ; restore the registers
+dpfEnd          PULU    A,B,X,Y,CC              ; restore the registers
                 RTS
 dpfFieldEndAddr FDB     0
 *======================================================================================================================
 * LockPiece:
 *----------------------------------------------------------------------------------------------------------------------
-LockPiece       PSHU    Y,X,A,B,CC              ; TODO not standard push order
+LockPiece       PSHU    A,B,X,Y,CC              ; save registers
                 LDX     #Piece1
-                ;LDY     #PiecesColor            ; get the char to draw
                 LDY     PiecesCharset
                 LDA     PieceId,X               ; by indexing PiecesCharset
                 LDA     A,Y
@@ -697,7 +697,7 @@ lcpEndLock      DECB
                 BGE     lcpEnd
                 LEAY    (FieldWidth-4),Y        ; move at the beginning of next line on video ram (32-width=28)
                 JMP     lcpLoopRow0
-lcpEnd          PULU    Y,X,A,B,CC              ; restore the registers
+lcpEnd          PULU    A,B,X,Y,CC              ; restore the registers
                 RTS
 lcpDrawChar     FCB     0
 lcpFieldEndAddr FDB     0
@@ -771,7 +771,7 @@ FieldBottom     FCC     /############/          ; won't be displayed but used fo
 *----------------------------------------------------------------------------------------------------------------------
 POLCAT	        EQU	$A000	                ; read keyboard ROM routine
 MaxRotations    EQU     4
-SleepTime       EQU     200
+SleepTime       EQU     $ff
 VideoRAM        EQU     $400                    ; video ram address
 EndVideoRAM     EQU     $600
 *======================================================================================================================
@@ -797,9 +797,9 @@ NextPiece       FCB     0
 SpeedForPiece   FCB     0                       ; default max speed value for this piece
 Speed           FCB     0                       ; max speed value for this speed
 SpeedCount      FCB     0                       ; will used to be count speed in a round
-IncrSpeedEvery  EQU     5                       ; increase speed every X pieces
+IncrSpeedEvery  EQU     15                      ; increase speed every X pieces
 IncrSpeedCount  FCB     0
-SpeedBump       EQU     50                      ; speed is increased by this number every X pieces
+SpeedBump       EQU     16                      ; speed is increased by this number every X pieces
 TotalPieces     FDB     0                       
 TotalPiecesStr  RMB     6
 RoundFlags      FCB     0                       ; different flags for a round using the following constants
