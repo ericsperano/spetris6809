@@ -15,7 +15,9 @@ $(DSK) : $(OBJ)
 	rm -f $(DSK)
 	decb dskini $(DSK)
 	decb copy -0 -a -t -r autoexec.bas $(DSK),AUTOEXEC.BAS
+	decb copy -0 -a -t -r autoexec.bas $(DSK),SPETRIS.BAS
 	decb copy -0 -a -t -r autoexec.bas $(DSK),S.BAS
+	decb copy -2 -b -r $(SRC) $(DSK),SPETRIS.ASM
 	decb copy -2 -b -r $(OBJ) $(DSK),SPETRIS.BIN
 
 %.bin: %.asm Makefile
