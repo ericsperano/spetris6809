@@ -569,7 +569,6 @@ kpEnd           PULU    A,B,X,Y,CC              ; restore registers
 *----------------------------------------------------------------------------------------------------------------------
 DrawCurrPiece   PSHU    A,B,X,Y,CC
                 LDX     #Piece1
-                ;LDY     #PiecesColor            ; get the char to draw
                 LDY     PiecesCharset
                 LDA     PieceId,X               ; by indexing PiecesCharset
                 LDA     A,Y
@@ -580,7 +579,6 @@ DrawCurrPiece   PSHU    A,B,X,Y,CC
                 MUL
                 ADDB    PieceX,X                ; add x position
                 ADDD    #VideoRAM               ; add base pointer
-                *TFR     D,Y                     ; Y == video memory where we start to draw
                 PSHU    D
                 ADDD    #(3*32)+4               ; where we stop to draw
                 STD     dcpDrawEndAddr
