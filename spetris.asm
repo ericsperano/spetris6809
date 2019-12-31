@@ -106,8 +106,8 @@ exitGame        JSR     RestoreVideoRAM         ; restore video ram
 * SaveVideoRam: saves the current video RAM into a buffer to be restored on exit
 *----------------------------------------------------------------------------------------------------------------------
 SaveVideoRAM    PSHU    A,X,Y,CC                ; save registers
+                LDX     #VideoRAMBuffer         ; X points to the saved buffer video ram
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
-                LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
 svLoop          LDA     ,Y+                     ; Load in A the byte of video ram
                 STA     ,X+                     ; And store it in the saved buffer
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
@@ -119,8 +119,8 @@ VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
 * RestoreVideoRAM: restores the video ram from the buffer
 *----------------------------------------------------------------------------------------------------------------------
 RestoreVideoRAM PSHU    A,X,Y,CC                ; save registers
+                LDX     #VideoRAMBuffer         ; X points to the saved buffer video ram
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
-                LDX     VideoRAMBuffer          ; X points to the saved buffer video ram
 rvLoop          LDA     ,X+                     ; Load in A the saved video byte
                 STA     ,Y+                     ; And put in in real video ram
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
