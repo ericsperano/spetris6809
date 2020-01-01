@@ -50,52 +50,52 @@ startRound      JSR     NewRound                ; initialize this round (a round
                 JSR     CopyPieces              ; first check if it would fit
                 JSR     DoesPieceFit
                 _HRF    #FPieceFits
-                LBEQ    endGame
+                LBEQ    endGame                 ; it does not fit, game over!
 roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
                 BEQ     sleep                   ; zero flag unset: no screen refresh needed
                 JSR     DrawField               ; draw current state of the field
                 JSR     DrawCurrPiece           ; draw current piece
                 _DRSCRS                         ; draw scores
                 _CRF    #FRefreshScreen         ; clear the refresh screen flag
-sleep           _HRF    #FFalling
-                BEQ     sleep1
-                _SRF    #FForceDown
+sleep           _HRF    #FFalling               ; is it falling?
+                BEQ     sleep1                  ; no, go sleep
+                _SRF    #FForceDown             ; yes, will force down and refresh screen
                 _SRF    #FRefreshScreen
 sleep1          JSR     Sleep                   ; increment the speed count
                 INC     SpeedCount
                 LDA     SpeedCount              ; and force down if it reached speed max
                 CMPA    Speed
-                BNE     pollKeyboard           ; if not go straight to poll keyboard
-                _SRF    #FForceDown
+                BNE     pollKeyboard            ; if not go straight to poll keyboard
+                _SRF    #FForceDown             ; yes, make the piece go down
                 _SRF    #FRefreshScreen
-                CLR     SpeedCount
-pollKeyboard    JSR     [POLCAT]                ; Polls keyboard
-                BEQ     chkForceDown            ; No key pressed
-                JSR     KeyPressed
-                _HRF    #FQuitGame
+                CLR     SpeedCount              ; reset the speed counter
+pollKeyboard    JSR     [POLCAT]                ; polls keyboard
+                BEQ     chkForceDown            ; no key pressed
+                JSR     KeyPressed              ; go handle key pressed
+                _HRF    #FQuitGame              ; brk pressed?
                 BNE     exitGame
-chkForceDown    _HRF    #FForceDown
-                LBEQ    roundLoop
-                JSR     CopyPieces              ; TODO necessary to call again?
+chkForceDown    _HRF    #FForceDown             ; is it time for piece to go down?
+                LBEQ    roundLoop               ; no
+                JSR     CopyPieces
                 LDX     #Piece2
-                INC     PieceY,X
+                INC     PieceY,X                ; check if it can go further down
                 JSR     DoesPieceFit
                 _HRF    #FPieceFits
-                BEQ     lockPiece               ; it doesnt, we lock*
+                BEQ     lockPiece               ; it doesnt, we lock
                 LDX     #Piece1                 ; it does, increment in piece1
                 INC     PieceY,X
                 _CRF    #FForceDown
                 JMP     roundLoop
-lockPiece       JSR     LockPiece
-                JSR     CheckForLines
+lockPiece       JSR     LockPiece               ; lock the piece into field
+                JSR     CheckForLines           ; check if it has complete lines
                 _HRF    #FHasLines
-                LBEQ    startRound
-                JSR     DrawField
-                LDB     #$ff                    ; TODO
+                LBEQ    startRound              ; no, go get next piece
+                JSR     DrawField               ; yep, draw and sleep for animation
+                LDB     #SleepTime
 loopSleep       JSR     Sleep
                 DECB
                 BNE     loopSleep
-                JSR     RemoveLines
+                JSR     RemoveLines             ; animation displayed, remove the lines from the field
                 JMP     startRound
 endGame         JSR     GameOver                ; game over message, zero flag is set if a new game is requested
                 BNE     exitGame
@@ -129,6 +129,7 @@ rvLoop          LDA     ,X+                     ; Load in A the saved video byte
                 RTS
 *======================================================================================================================
 * CopyPieces: Copy Piece1 into Piece2
+* Piece1 is the current piece and piece2 is used to test if it would fit
 *----------------------------------------------------------------------------------------------------------------------
 CopyPieces      PSHU    A,B,X,Y,CC
                 LDX     #Piece1
@@ -217,7 +218,7 @@ dfLoop2         LDA     ,X+                     ; Load in A the byte to display
 * DisplayIntro:
 *----------------------------------------------------------------------------------------------------------------------
 DisplayIntro    PSHU    A,X,Y,CC                ; save registers
-                LDX     #Intro 
+                LDX     #Intro
                 LDY     #VideoRAM
 diLoop0         LDA     ,X+
                 ANDA    #%00111111              ; keep the right 6 bits
@@ -264,18 +265,18 @@ _ClsRightPanel  MACRO
 * NewGame: initializes the variables for a new game, prepares the field and do an initial drawing of the screen
 *----------------------------------------------------------------------------------------------------------------------
 NewGame         PSHU    A,B,X,CC                ; save registers
-                LDD     #0                      
+                LDD     #0
                 STD     TotalPieces             ; reset total pieces
                 STD     Score                   ; reset score
                 LDX     #ScoreStr               ; reset score string
-                JSR     IntToStr                
+                JSR     IntToStr
                 LDA     #'0'
-                STA     4,X                
+                STA     4,X
                 LDA     #IncrSpeedEvery         ; set speed counts to default
                 STA     IncrSpeedCount
                 CLR     SpeedCount
                 LDA     #$FF                    ; reset speed for piece
-                STA     SpeedForPiece                
+                STA     SpeedForPiece
                 JSR     InitField               ; initialize field
                 JSR     DrawField               ; display the field on the left
                 _ClsRightPanel
@@ -287,13 +288,13 @@ NewGame         PSHU    A,B,X,CC                ; save registers
 *======================================================================================================================
 * GetNextPiece:
 *----------------------------------------------------------------------------------------------------------------------
-GetNextPiece    PSHS    A,B,X,U,CC                ; save registers on the system stack
-                LDX     #Piece1
+GetNextPiece    PSHS    A,B,X,U,CC              ; save registers on the system stack
+                LDX     #Piece1                 ; update current piece struct
                 LDA     NextPiece
-                STA     PieceId,X
-                LDA     #(FieldWidth/2)-2
+                STA     PieceId,X               ; copying the next piece id as current piece id
+                LDA     #(FieldWidth/2)-2       ; middle of the field
                 STA     PieceX,X
-                CLR     PieceY,X
+                CLR     PieceY,X                ; first row
                 CLR     PieceRot,X
                 LDD     #7                      ; random number from 1 to 7
                 JSR     $B4F4                   ; copy D into FPAC 0 (Floating point accumulator)
@@ -492,11 +493,12 @@ DIGIT		FDB	0
 *               Arrow key down:         Move 1 down
 *               Space Bar:              Fall piece until collision
 *               P:                      Pause game
-*               Break:                  Exit game instantly              
+*               Break:                  Exit game instantly
 *
 * A (r):        The key pressed
 *----------------------------------------------------------------------------------------------------------------------
 KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
+                JSR     CopyPieces              ; copy piece1 to piece2 for testing
                 LDX     #Piece1                 ; Piece1 is the current piece
                 LDY     #Piece2                 ; Piece2 is used to test if it fits
                 CMPA    #KeyLeft                ; was the key press the left arrow key?
@@ -511,7 +513,7 @@ KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
                 LBEQ    kpSpace
                 CMPA    #KeyEscape              ; break key?
                 LBEQ    kpBreak
-                CMPA    #'P'                    ; P key? 
+                CMPA    #'P'                    ; P key?
                 LBEQ    kpP
                 JMP     kpEnd                   ; ignore other keys
 kpLeft          DEC     PieceX,Y                ; decrement X in piece2
@@ -732,31 +734,31 @@ linesCount      FCB     0
 *======================================================================================================================
 * RemoveLines
 *----------------------------------------------------------------------------------------------------------------------
-RemoveLines     PSHU    A,B,X,Y,CC
-                LDX     #FieldBottom-FieldWidth
-rlLoop0         LDA     1,X
+RemoveLines     PSHU    A,B,X,Y,CC              ; save registers
+                LDX     #FieldBottom-FieldWidth ; start from the bottom
+rlLoop0         LDA     1,X                     ; is first char a line indicator?
                 CMPA    #ChLine
-                BNE     rl2
-                JSR     moveLines
-                JMP     rlLoop0
-rl2             LEAX    -FieldWidth,X
-                CMPX    #Field
-                BGE     rlLoop0
-endRemoveLines  PULU    A,B,X,Y,CC
+                BNE     rl2                     ; no, skip
+                JSR     moveRows                ; yes! move rows down
+                JMP     rlLoop0                 ; check at current pos again
+rl2             LEAX    -FieldWidth,X           ; go up one row
+                CMPX    #Field                  ; are we at top?
+                BGE     rlLoop0                 ; no, keep checking for lines
+endRemoveLines  PULU    A,B,X,Y,CC              ; restore registers
                 RTS
-
-moveLines       PSHS    X
-mlLoop0         CMPX    #Field
-                BEQ     endMoveLines
-                LEAY    -FieldWidth,X
-                LDB     #FieldWidth-2
-mlLoop1         LDA     B,Y
+; move rows down
+moveRows        PSHU    X
+mlLoop0         CMPX    #Field                  ; are we at the top?
+                BEQ     endMoveRows             ; yes, we're done
+                LEAY    -FieldWidth,X           ; go one up
+                LDB     #FieldWidth-2           ; only move inside the borders
+mlLoop1         LDA     B,Y                     ; copy row above into current row
                 STA     B,X
                 DECB
                 BNE     mlLoop1
-                TFR     Y,X
+                TFR     Y,X                     ; row above is now current row
                 JMP     mlLoop0
-endMoveLines    PULS    X
+endMoveRows     PULU    X
                 RTS
 *======================================================================================================================
 * Field structure and constants
@@ -769,7 +771,7 @@ FieldBottom     FCC     /############/          ; won't be displayed but used fo
 *----------------------------------------------------------------------------------------------------------------------
 POLCAT	        EQU	$A000	                ; read keyboard ROM routine
 MaxRotations    EQU     4
-SleepTime       EQU     $ff
+SleepTime       EQU     $FF
 VideoRAM        EQU     $400                    ; video ram address
 EndVideoRAM     EQU     $600
 *======================================================================================================================
@@ -798,7 +800,7 @@ SpeedCount      FCB     0                       ; will used to be count speed in
 IncrSpeedEvery  EQU     15                      ; increase speed every X pieces
 IncrSpeedCount  FCB     0
 SpeedBump       EQU     16                      ; speed is increased by this number every X pieces
-TotalPieces     FDB     0                       
+TotalPieces     FDB     0
 TotalPiecesStr  RMB     6
 RoundFlags      FCB     0                       ; different flags for a round using the following constants
 FRefreshScreen  EQU     %00000001
@@ -818,7 +820,7 @@ ChDot           EQU     $2E
 *======================================================================================================================
 * Key constants
 *----------------------------------------------------------------------------------------------------------------------
-KeyUp		EQU	$5E                     
+KeyUp		EQU	$5E
 KeyDown		EQU 	$0A
 KeyLeft         EQU     $08
 KeyRight        EQU     $09
@@ -899,7 +901,7 @@ NextPieceLabel  FDB     VideoRAM+(32*6)+FieldWidth+1
                 FCC     /NEXT PIECE:@/
 NextPieceVRAM   EQU     VideoRAM+(32*8)+FieldWidth+1
 NextPieceVRAME  EQU     VideoRAM+(32*11)+FieldWidth+1+4
-PausedLabelLen  EQU     6                
+PausedLabelLen  EQU     6
 PausedLabel     FDB     VideoRAM+(32*15)+FieldWidth+8
                 FCC     /PAUSED@/
 GameOverLabel   FDB     VideoRAM+(32*8)+FieldWidth+1+3
@@ -911,6 +913,6 @@ AskNewGameLabel FDB     VideoRAM+(32*15)+FieldWidth+1+3
 *======================================================================================================================
 * User stack (end of program)
 *----------------------------------------------------------------------------------------------------------------------
-                RMB     32                      ; user stack space TODO maybe even less or more????
+                RMB     32                      ; user stack space
 UserStack       EQU     *                       ; have the user stack at the end of the program
                 END     SPETRIS
