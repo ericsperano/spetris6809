@@ -32,36 +32,36 @@ _CRF            MACRO
 _DRSCRS         MACRO
                 LDX     #ScoreStr               ; current score string to display
                 LDY     #ScoreVRAM              ; position on screen
-                JSR     DisplayScore            ; display it
+                LBSR    DisplayScore            ; display it
                 LDX     #HighScoreStr           ; high score string to display
                 LDY     #HighScoreVRAM          ; position on screen
-                JSR     DisplayScore            ; display it
+                LBSR    DisplayScore            ; display it
                 LDX     #TotalPiecesStr         ; total pieces string to display
                 LDY     #TotalPiecesVRAM        ; position on screen
-                JSR     DisplayScore            ; display it
+                LBSR    DisplayScore            ; display it
                 ENDM
 *----------------------------------------------------------------------------------------------------------------------
 SPETRIS         LDU     #UserStack              ; init user stack pointer
-                JSR     SaveVideoRAM            ; save video ram to restore on exit
-                JSR     RandomizeSeed           ; randomize the seed with the current timer
-                JSR     DisplayIntro            ; display the intro message and wait for a key to be pressed
-startGame       JSR     NewGame                 ; initialize new game data and screen
-startRound      JSR     NewRound                ; initialize this round (a round is what handle one piece in the game)
-                JSR     CopyPieces              ; first check if it would fit
-                JSR     DoesPieceFit
+                LBSR    SaveVideoRAM            ; save video ram to restore on exit
+                LBSR    RandomizeSeed           ; randomize the seed with the current timer
+                LBSR    DisplayIntro            ; display the intro message and wait for a key to be pressed
+startGame       LBSR    NewGame                 ; initialize new game data and screen
+startRound      LBSR    NewRound                ; initialize this round (a round is what handle one piece in the game)
+                LBSR    CopyPieces              ; first check if it would fit
+                LBSR    DoesPieceFit
                 _HRF    #FPieceFits
                 LBEQ    endGame                 ; it does not fit, game over!
 roundLoop       _HRF    #FRefreshScreen         ; zero flag will be set if flag is disabled
                 BEQ     sleep                   ; zero flag unset: no screen refresh needed
-                JSR     DrawField               ; draw current state of the field
-                JSR     DrawCurrPiece           ; draw current piece
+                LBSR    DrawField               ; draw current state of the field
+                LBSR    DrawCurrPiece           ; draw current piece
                 _DRSCRS                         ; draw scores
                 _CRF    #FRefreshScreen         ; clear the refresh screen flag
 sleep           _HRF    #FFalling               ; is it falling?
                 BEQ     sleep1                  ; no, go sleep
                 _SRF    #FForceDown             ; yes, will force down and refresh screen
                 _SRF    #FRefreshScreen
-sleep1          JSR     Sleep                   ; increment the speed count
+sleep1          LBSR     Sleep                  ; increment the speed count
                 INC     SpeedCount
                 LDA     SpeedCount              ; and force down if it reached speed max
                 CMPA    Speed
@@ -71,36 +71,36 @@ sleep1          JSR     Sleep                   ; increment the speed count
                 CLR     SpeedCount              ; reset the speed counter
 pollKeyboard    JSR     [POLCAT]                ; polls keyboard
                 BEQ     chkForceDown            ; no key pressed
-                JSR     KeyPressed              ; go handle key pressed
+                LBSR    KeyPressed              ; go handle key pressed
                 _HRF    #FQuitGame              ; brk pressed?
                 BNE     exitGame
 chkForceDown    _HRF    #FForceDown             ; is it time for piece to go down?
                 LBEQ    roundLoop               ; no
-                JSR     CopyPieces
+                LBSR    CopyPieces
                 LDX     #Piece2
                 INC     PieceY,X                ; check if it can go further down
-                JSR     DoesPieceFit
+                LBSR    DoesPieceFit
                 _HRF    #FPieceFits
                 BEQ     lockPiece               ; it doesnt, we lock
                 LDX     #Piece1                 ; it does, increment in piece1
                 INC     PieceY,X
                 _CRF    #FForceDown
                 JMP     roundLoop
-lockPiece       JSR     LockPiece               ; lock the piece into field
-                JSR     CheckForLines           ; check if it has complete lines
+lockPiece       LBSR    LockPiece               ; lock the piece into field
+                LBSR    CheckForLines           ; check if it has complete lines
                 _HRF    #FHasLines
                 LBEQ    startRound              ; no, go get next piece
-                JSR     DrawField               ; yep, draw and sleep for animation
+                LBSR    DrawField               ; yep, draw and sleep for animation
                 LDB     #SleepTime
-loopSleep       JSR     Sleep
+loopSleep       LBSR    Sleep
                 DECB
                 BNE     loopSleep
-                JSR     RemoveLines             ; animation displayed, remove the lines from the field
+                LBSR    RemoveLines             ; animation displayed, remove the lines from the field
                 JMP     startRound
-endGame         JSR     GameOver                ; game over message, zero flag is set if a new game is requested
+endGame         LBSR    GameOver                ; game over message, zero flag is set if a new game is requested
                 BNE     exitGame
                 JMP     startGame               ; and go back to game initialization
-exitGame        JSR     RestoreVideoRAM         ; restore video ram
+exitGame        LBSR    RestoreVideoRAM         ; restore video ram
                 RTS
 *======================================================================================================================
 * SaveVideoRam: saves the current video RAM into a buffer to be restored on exit
@@ -176,7 +176,7 @@ crLoop1         STA     ,X+                     ; put the char on screen
                 CMPX    #EndVideoRAM            ; check if we are done completely
                 BNE     crLoop0
                 LDX     #GameTitle              ; load in x the displayable game title
-                JSR     PrintString             ; print it
+                BSR     PrintString             ; print it
                 PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
@@ -225,7 +225,7 @@ diLoop0         LDA     ,X+
                 STA     ,Y+
                 CMPY    #EndVideoRAM
                 BNE     diLoop0
-diPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
+diPollKeyboard  JSR    [POLCAT]                ; polls keyboard for any key
                 BEQ     diPollKeyboard          ; poll again if no key pressed
                 CMPA    #'C'                    ; check if C was press
                 BNE     diCheckMono             ; no, maybe 'M'
@@ -242,9 +242,9 @@ diSaveCharset   STD     PiecesCharset           ; save charset
 *----------------------------------------------------------------------------------------------------------------------
 RandomizeSeed   PSHS    A,B,U                   ; save registers on the system stack
                 LDD     $112                    ; timer value
-                JSR     $B4F4                   ; put TIMER into FPAC 0 for max value
-                JSR     $BF1F                   ; generate a random number THIS MODIFIES U!!!
-                JSR     $B3ED                   ; retrieve FPAC 0; D= your random number
+                LBSR     $B4F4                  ; put TIMER into FPAC 0 for max value
+                LBSR    $BF1F                   ; generate a random number THIS MODIFIES U!!!
+                LBSR    $B3ED                   ; retrieve FPAC 0; D= your random number
                 STB     $118                    ; seed location
                 PULS    A,B,U                   ; restore registers from the system stack
                 RTS
@@ -252,13 +252,13 @@ RandomizeSeed   PSHS    A,B,U                   ; save registers on the system s
 * ClsRightPanel:
 *----------------------------------------------------------------------------------------------------------------------
 _ClsRightPanel  MACRO
-                JSR     ClsRight                ; clear the right side and print the game title
+                LBSR    ClsRight                ; clear the right side and print the game title
                 LDX     #HighScoreLabel         ; display the score label
-                JSR     PrintString
+                LBSR    PrintString
                 LDX     #ScoreLabel             ; display the score label
-                JSR     PrintString
+                LBSR    PrintString
                 LDX     #TotPiecesLabel         ; display the total pieces label
-                JSR     PrintString
+                LBSR    PrintString
                 ENDM
 *----------------------------------------------------------------------------------------------------------------------
 *======================================================================================================================
@@ -269,7 +269,7 @@ NewGame         PSHU    A,B,X,CC                ; save registers
                 STD     TotalPieces             ; reset total pieces
                 STD     Score                   ; reset score
                 LDX     #ScoreStr               ; reset score string
-                JSR     IntToStr
+                LBSR    IntToStr
                 LDA     #'0'
                 STA     4,X
                 LDA     #IncrSpeedEvery         ; set speed counts to default
@@ -277,12 +277,12 @@ NewGame         PSHU    A,B,X,CC                ; save registers
                 CLR     SpeedCount
                 LDA     #$FF                    ; reset speed for piece
                 STA     SpeedForPiece
-                JSR     InitField               ; initialize field
-                JSR     DrawField               ; display the field on the left
+                LBSR    InitField               ; initialize field
+                LBSR    DrawField               ; display the field on the left
                 _ClsRightPanel
                 LDX     #NextPieceLabel         ; display the next piece lable
-                JSR     PrintString
-                JSR     GetNextPiece            ; initialize next piece
+                LBSR    PrintString
+                BSR     GetNextPiece            ; initialize next piece
                 PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
@@ -297,9 +297,9 @@ GetNextPiece    PSHS    A,B,X,U,CC              ; save registers on the system s
                 CLR     PieceY,X                ; first row
                 CLR     PieceRot,X
                 LDD     #7                      ; random number from 1 to 7
-                JSR     $B4F4                   ; copy D into FPAC 0 (Floating point accumulator)
-                JSR     $BF1F                   ; generate a random number
-                JSR     $B3ED                   ; retrieve FPAC 0; D= your random number
+                LBSR     $B4F4                  ; copy D into FPAC 0 (Floating point accumulator)
+                LBSR     $BF1F                  ; generate a random number
+                LBSR     $B3ED                  ; retrieve FPAC 0; D= your random number
                 DECB                            ; decrement by 1 because number is between 1 and 7
                 STB     NextPiece
                 PULS    A,B,X,U,CC              ; restore registers from the system stack
@@ -343,12 +343,12 @@ dnpDrawChar     FCB     0
 NewRound        PSHU    A,B,CC
                 CLR     RoundFlags              ; clear the flags for this round
                 _SRF    #FRefreshScreen         ; will refresh screen at the start of this round
-                JSR     GetNextPiece
+                BSR     GetNextPiece
                 LDD     TotalPieces             ; increment total pieces count
                 ADDD    #1
                 STD     TotalPieces             ; save it and update the string version
                 LDX     #TotalPiecesStr
-                JSR     IntToStr                ; and update the score str for display
+                LBSR    IntToStr                ; and update the score str for display
                 DEC     IncrSpeedCount
                 LDA     IncrSpeedCount          ; check if we need to increase speed
                 BNE     nrNoIncr
@@ -359,7 +359,7 @@ NewRound        PSHU    A,B,CC
                 STA     IncrSpeedCount
 nrNoIncr        LDA     SpeedForPiece
                 STA     Speed
-                JSR     DrawNextPiece
+                BSR     DrawNextPiece
                 PULU    A,B,CC
                 RTS
 *======================================================================================================================
@@ -393,12 +393,12 @@ isAdd25         ADDD    #25                     ; add the mininal 25
                 ADDD    Score                   ; add the current score
                 STD     Score                   ; and save it
                 LDX     #ScoreStr
-                JSR     IntToStr                ; and update the score str for display
+                LBSR    IntToStr                ; and update the score str for display
                 CMPD    HighScore               ; compare with current high score
                 BLT     endIncScore             ; smaller, no update
                 STD     HighScore
                 LDX     #HighScoreStr
-                JSR     IntToStr
+                BSR     IntToStr
 endIncScore     PULU    A,B,X,CC                ; restore registers
                 RTS
 *======================================================================================================================
@@ -423,14 +423,14 @@ GameOver        PSHU    X,Y
                 _ClsRightPanel
                 _DRSCRS                         ; draw scores
                 LDX     #GameOverLabel          ; display game over message
-                JSR     PrintString
+                LBSR    PrintString
                 LDD     Score                   ; check if new high score
                 CMPD    HighScore
                 BLT     goAskNewGame            ; no new high score
                 LDX     #NewHiScoreLabel
-                JSR     PrintString
+                LBSR    PrintString
 goAskNewGame    LDX     #AskNewGameLabel        ; ask for a new game
-                JSR     PrintString
+                LBSR    PrintString
 goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
                 BEQ     goPollKeyboard          ; no key pressed
                 CMPA    #'Y'                    ; sets the zero flag if the key was Y
@@ -447,7 +447,7 @@ endGameOver     PULU    X,Y
 * X (r):        buffer pointer (should be at least 6 bytes)
 *----------------------------------------------------------------------------------------------------------------------
 IntToStr        PSHU	X,Y,A,B,CC
-                JSR	ITOA003
+                BSR	ITOA003
                 LDX     3,U
                 LDB     #' '
 trimZeros       LDA     ,X
@@ -458,13 +458,13 @@ trimZeros       LDA     ,X
 gssEnd		PULU    X,Y,A,B,CC
 		RTS
 ITOA003		LDY 	#10000
-	        JSR	ITOA000
+	        BSR	ITOA000
 	        LDY 	#1000
-	        JSR	ITOA000
+	        BSR	ITOA000
 ITOA004		LDY	#100
-		JSR	ITOA000
+		BSR	ITOA000
 		LDY	#10
-		JSR	ITOA000
+		BSR	ITOA000
 		LDY	#1
 ITOA000	        STD	NUMBER
 	        STY	DIGIT
@@ -498,7 +498,7 @@ DIGIT		FDB	0
 * A (r):        The key pressed
 *----------------------------------------------------------------------------------------------------------------------
 KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
-                JSR     CopyPieces              ; copy piece1 to piece2 for testing
+                LBSR     CopyPieces             ; copy piece1 to piece2 for testing
                 LDX     #Piece1                 ; Piece1 is the current piece
                 LDY     #Piece2                 ; Piece2 is used to test if it fits
                 CMPA    #KeyLeft                ; was the key press the left arrow key?
@@ -517,14 +517,14 @@ KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
                 LBEQ    kpP
                 JMP     kpEnd                   ; ignore other keys
 kpLeft          DEC     PieceX,Y                ; decrement X in piece2
-                JSR     DoesPieceFit            ; check if it fits
+                LBSR    DoesPieceFit            ; check if it fits
                 _HRF    #FPieceFits
                 LBEQ    kpEnd
                 DEC     PieceX,X                ; it fits, decrement X in piece1
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     kpEnd
 kpRight         INC     PieceX,Y                ; increment X in piece2
-                JSR     DoesPieceFit            ; check if it fits
+                LBSR     DoesPieceFit           ; check if it fits
                 _HRF    #FPieceFits
                 LBEQ    kpEnd
                 INC     PieceX,X                ; it fits, increment X in piece1
@@ -536,7 +536,7 @@ kpUp            INC     PieceRot,Y              ; increment rotation in piece2
                 BNE     kpUpEnd                 ; reset to 0 if over 4
                 CLRA
 kpUpEnd         STA     PieceRot,Y              ; update piece2
-                JSR     DoesPieceFit            ; check if it fits
+                LBSR     DoesPieceFit           ; check if it fits
                 _HRF    #FPieceFits
                 BEQ     kpEnd
                 LDA     PieceRot,Y              ; it fits, update piece1
@@ -544,7 +544,7 @@ kpUpEnd         STA     PieceRot,Y              ; update piece2
                 _SRF    #FRefreshScreen         ; and will have to refresh screen
                 JMP     kpEnd
 kpDown          INC     PieceY,Y                ; increment Y in piece2
-                JSR     DoesPieceFit            ; check if it fits
+                LBSR    DoesPieceFit            ; check if it fits
                 _HRF    #FPieceFits
                 BEQ     kpEnd
                 INC     PieceY,X                ; it fits, increments Y in piece1
@@ -555,7 +555,7 @@ kpSpace         _SRF    #FFalling               ; set the falling flag to on
 kpBreak         _SRF    #FQuitGame              ; set the quit game to exit round loop and game
                 JMP     kpEnd
 kpP             LDX     #PausedLabel            ; print "paused" message
-                JSR     PrintString
+                LBSR    PrintString
 kpPollKeyboard  JSR     [POLCAT]                ; polls keyboard for any key
                 BEQ     kpPollKeyboard          ; poll again if no key pressed
                 LDY     ,X                      ; get the vram address of the pause message still in X
@@ -727,7 +727,7 @@ cflNextRow      LEAX    FieldWidth,X            ; go on to next row
                 CMPX    #FieldBottom            ; check if we reach the bottom of the field
                 BLT     cflCheckRow             ; no, loop
                 LDA     linesCount              ; increment the score, lines count has to be in A
-                JSR     IncScore                ; call sub routine to compute new score
+                LBSR     IncScore               ; call sub routine to compute new score
                 PULU    A,B,X,Y,CC
                 RTS
 linesCount      FCB     0
@@ -739,7 +739,7 @@ RemoveLines     PSHU    A,B,X,Y,CC              ; save registers
 rlLoop0         LDA     1,X                     ; is first char a line indicator?
                 CMPA    #ChLine
                 BNE     rl2                     ; no, skip
-                JSR     moveRows                ; yes! move rows down
+                BSR     moveRows                ; yes! move rows down
                 JMP     rlLoop0                 ; check at current pos again
 rl2             LEAX    -FieldWidth,X           ; go up one row
                 CMPX    #Field                  ; are we at top?
