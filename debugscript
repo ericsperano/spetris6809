@@ -1,0 +1,5 @@
+LOAD spetris.rom,3F00
+GT 500
+PC=3F00
+BP $3F00
+GO
