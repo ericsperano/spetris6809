@@ -24,16 +24,16 @@ $(DSK) : $(OBJ)
 	$(ASM) $(ASM_FLAGS) -o $@ $< | tee $<.log
 
 %.rom: %.asm Makefile 
-	$(ASM) $(ASM_FLAGS) -r -o $@ $< | tee $<.log
-
+	$(ASM) -9 -p cd -r -o $@ $< 
+	
 run: all
 	$(MAME) $(MAME_ARGS) $(DSK)
 
 debug: $(ROM)
-	$(MAME) -debug -debugscript debugscript coco3 -window -nomax
+	$(MAME) -debug -debugscript debugscript coco3 -skip_gameinfo -ui_active -window -nomax
 
 copy: all
 	cp $(DSK) /Volumes/COCO3/
 
 clean:
-	@rm -rfv $(DSK) $(OBJ)
+	@rm -rfv $(DSK) $(OBJ) $(ROM) *.log
