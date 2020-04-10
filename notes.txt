@@ -1,2 +1,0 @@
-Piece1: wpset $487F,4,w
-Piece2: wpset $4883,4,w

@@ -16,16 +16,15 @@ $(DSK) : $(OBJ)
 	rm -f $(DSK)
 	decb dskini $(DSK)
 	decb copy -0 -a -t -r autoexec.bas $(DSK),AUTOEXEC.BAS
-	decb copy -0 -a -t -r autoexec.bas $(DSK),SPETRIS.BAS
 	decb copy -2 -b -r $(SRC) $(DSK),SPETRIS.ASM
 	decb copy -2 -b -r $(OBJ) $(DSK),SPETRIS.BIN
 
 %.bin: %.asm Makefile
 	$(ASM) $(ASM_FLAGS) -o $@ $< | tee $<.log
 
-%.rom: %.asm Makefile 
-	$(ASM) -9 -p cd -r -o $@ $< 
-	
+%.rom: %.asm Makefile
+	$(ASM) -9 -p cd -r -o $@ $<
+
 run: all
 	$(MAME) $(MAME_ARGS) $(DSK)
 
