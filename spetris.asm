@@ -498,10 +498,10 @@ DIGIT		FDB	0
 * A (r):        The key pressed
 *----------------------------------------------------------------------------------------------------------------------
 KeyPressed      PSHU    A,B,X,Y,CC              ; save registers
-                LBSR     CopyPieces             ; copy piece1 to piece2 for testing
+                LBSR    CopyPieces              ; copy piece1 to piece2 for testing
                 LDX     #Piece1                 ; Piece1 is the current piece
                 LDY     #Piece2                 ; Piece2 is used to test if it fits
-                CMPA    #KeyLeft                ; was the key press the left arrow key?
+                CMPA    #KeyLeft                ; was the key pressed the left arrow key?
                 BEQ     kpLeft
                 CMPA    #KeyRight               ; right arrow key?
                 BEQ     kpRight
