@@ -220,19 +220,19 @@ dfLoop2         LDA     ,X+                     ; Load in A the byte to display
 DisplayIntro    PSHU    A,X,Y,CC                ; save registers
                 LDX     #Intro
                 LDY     #VideoRAM
-diLoop0         LDA     ,X+
+!               LDA     ,X+
                 ANDA    #%00111111              ; keep the right 6 bits
                 STA     ,Y+
                 CMPY    #EndVideoRAM
-                BNE     diLoop0
-diPollKeyboard  JSR    [POLCAT]                ; polls keyboard for any key
-                BEQ     diPollKeyboard          ; poll again if no key pressed
+                BNE     <
+!               JSR    [POLCAT]                 ; polls keyboard for any key
+                BEQ     <                       ; poll again if no key pressed
                 CMPA    #'C'                    ; check if C was press
                 BNE     diCheckMono             ; no, maybe 'M'
                 LDD     #PiecesColor            ; yes, use color charset
                 JMP     diSaveCharset
 diCheckMono     CMPA    #'M'                    ; check if M was press
-                BNE     diPollKeyboard          ; no, ignore key and poll again
+                BNE     <                       ; no, ignore key and poll again
                 LDD     #PiecesMono             ; yes, use mono charset
 diSaveCharset   STD     PiecesCharset           ; save charset
                 PULU    A,X,Y,CC                ; restore registers
@@ -322,10 +322,10 @@ DrawNextPiece   PSHU    A,B,X,Y,CC
 dnpLoopRow0     LDB     #4                      ; 4 "pixels' per row
 dnpLoopRow1     LDA     ,X+
                 CMPA    #ChDot
-                BNE     dnpDraw                 ; not a dot, we draw it on screen then
+                BNE     >                       ; not a dot, we draw it on screen then
                 LDA     #ChSpc
                 JMP     dnpEndDraw
-dnpDraw         LDA     dnpDrawChar             ; the char to draw, from the stack
+!               LDA     dnpDrawChar             ; the char to draw, from the stack
 dnpEndDraw      STA     ,Y+
                 DECB
                 BNE     dnpLoopRow1
@@ -351,13 +351,13 @@ NewRound        PSHU    A,B,CC
                 LBSR    IntToStr                ; and update the score str for display
                 DEC     IncrSpeedCount
                 LDA     IncrSpeedCount          ; check if we need to increase speed
-                BNE     nrNoIncr
+                BNE     >
                 LDA     SpeedForPiece
                 SUBA    #SpeedBump
                 STA     SpeedForPiece
                 LDA     #IncrSpeedEvery         ; reset the incr speed every piece counter
                 STA     IncrSpeedCount
-nrNoIncr        LDA     SpeedForPiece
+!               LDA     SpeedForPiece
                 STA     Speed
                 BSR     DrawNextPiece
                 PULU    A,B,CC
@@ -367,8 +367,8 @@ nrNoIncr        LDA     SpeedForPiece
 *----------------------------------------------------------------------------------------------------------------------
 Sleep           PSHU    D,CC
                 LDD     #SleepTime
-sleepLoop       SUBD    #1
-                BNE     sleepLoop
+!               SUBD    #1
+                BNE     <
                 PULU    D,CC
                 RTS
 *======================================================================================================================
@@ -384,9 +384,9 @@ IncScore        PSHU    A,B,X,CC                ; save registers
                 CMPA    #0                      ; check if there are lines points
                 BEQ     isAdd25                 ; no, just the 25
                 LDB     #1                      ; will shift 1 left by the number of lines
-isShift         LSLB                            ; shift b to the left
+!               LSLB                            ; shift b to the left
                 DECA                            ; decrement lines count
-                BNE     isShift                 ; shift again if more lines
+                BNE     <                       ; shift again if more lines
                 LDA     #100                    ; will multiply b by 100
                 MUL
 isAdd25         ADDD    #25                     ; add the mininal 25
@@ -408,10 +408,10 @@ endIncScore     PULU    A,B,X,CC                ; restore registers
 *----------------------------------------------------------------------------------------------------------------------
 DisplayScore    PSHU    A,B,X,Y,CC              ; save registers
                 LDB     #5                      ; score is 5 chars long #TODO constants or check of end of string
-lpDisplayScore  LDA     ,X+
+!               LDA     ,X+
                 STA     ,Y+
                 DECB
-                BNE     lpDisplayScore
+                BNE     <
                 PULU    A,B,X,Y,CC              ; restore registers
                 RTS
 *======================================================================================================================
@@ -431,14 +431,14 @@ GameOver        PSHU    X,Y
                 LBSR    PrintString
 goAskNewGame    LDX     #AskNewGameLabel        ; ask for a new game
                 LBSR    PrintString
-goPollKeyboard  JSR     [POLCAT]                ; polls keyboard
-                BEQ     goPollKeyboard          ; no key pressed
+!               JSR     [POLCAT]                ; polls keyboard
+                BEQ     <                       ; no key pressed
                 CMPA    #'Y'                    ; sets the zero flag if the key was Y
-                BEQ     endGameOver             ; end exit
+                BEQ     >                       ; end exit
                 CMPA    #'N'                    ; poll again if key was not N
-                BNE     goPollKeyboard
+                BNE     <
                 LDA     #1                      ; unset the zero flag for N key
-endGameOver     PULU    X,Y
+!               PULU    X,Y
                 RTS
 *======================================================================================================================
 * IntToStr: convert an unsigned integer to a string. Stolen from Coco SDC-Explorer :)

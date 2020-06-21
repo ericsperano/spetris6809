@@ -6,7 +6,7 @@ ASM_FLAGS := -9bl -p cd
 OBJ := ${SRC:asm=bin}
 ROM := ${SRC:asm=rom}
 MAME := mame
-MAME_ARGS := coco3 -window -nomax -flop1
+MAME_ARGS := coco3 -window -nomax -skip_gameinfo -flop1
 
 .PHONY: all
 
