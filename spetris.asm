@@ -108,10 +108,10 @@ exitGame        LBSR    RestoreVideoRAM         ; restore video ram
 SaveVideoRAM    PSHU    A,X,Y,CC                ; save registers
                 LDX     #VideoRAMBuffer         ; X points to the saved buffer video ram
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
-svLoop          LDA     ,Y+                     ; Load in A the byte of video ram
+!               LDA     ,Y+                     ; Load in A the byte of video ram
                 STA     ,X+                     ; And store it in the saved buffer
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
-                BNE     svLoop
+                BNE     <
                 PULU    A,X,Y,CC                ; restore registers
                 RTS
 VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
@@ -121,10 +121,10 @@ VideoRAMBuffer  RMB     32*16                   ; 16 lines of 32 chars
 RestoreVideoRAM PSHU    A,X,Y,CC                ; save registers
                 LDX     #VideoRAMBuffer         ; X points to the saved buffer video ram
                 LDY     #VideoRAM               ; Y points to the beginning of the video ram
-rvLoop          LDA     ,X+                     ; Load in A the saved video byte
+!               LDA     ,X+                     ; Load in A the saved video byte
                 STA     ,Y+                     ; And put in in real video ram
                 CMPY    #EndVideoRAM            ; At the end of the video ram?
-                BNE     rvLoop
+                BNE     <
                 PULU    A,X,Y,CC                ; restore registers
                 RTS
 *======================================================================================================================
@@ -135,10 +135,10 @@ CopyPieces      PSHU    A,B,X,Y,CC
                 LDX     #Piece1
                 LDY     #Piece2
                 LDB     #PieceDescLen
-cpLoop          LDA     ,X+
+!               LDA     ,X+
                 STA     ,Y+
                 DECB
-                BNE     cpLoop
+                BNE     <
                 PULU    A,B,X,Y,CC
                 RTS
 *======================================================================================================================
@@ -157,10 +157,10 @@ PrintString     PSHU    A,X,Y,CC                ; save registers
                 LEAY    [,X++]                  ; load the first two bytes in Y and advance X to start of string
 psLoop          LDA     ,X+                     ; load char from string
                 ANDA    #%00111111              ; keep the right 6 bits
-                BEQ     psEnd                   ; exit loop if char is end of string
+                BEQ     >                       ; exit loop if char is end of string
                 STA     ,Y+                     ; display it
                 JMP     psLoop                  ; and loop
-psEnd           PULU    A,X,Y,CC                ; restore registers
+!               PULU    A,X,Y,CC                ; restore registers
                 RTS
 *======================================================================================================================
 * ClsRight: clear the right side of the screen and print the game name at the top
